@@ -1,0 +1,16 @@
+# Hugging Face ZeroGPU Space dependencies
+# Torch is provided by the ZeroGPU runtime; pin a CUDA-compatible build if needed.
+torch
+numpy<2.0.0
+pillow
+spaces
+gradio>=4.44.0
+
+# Super-resolution + face restoration
+realesrgan
+gfpgan
+basicsr
+
+# basicsr depends on an older torchvision API; the shim below is applied via
+# a patch note in the README (functional_tensor import). Keep versions aligned.
+facexlib
