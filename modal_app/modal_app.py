@@ -29,20 +29,29 @@ import modal
 # ---------------------------------------------------------------------------
 image = (
     modal.Image.debian_slim(python_version="3.10")
-    .apt_install("libgl1", "libglib2.0-0", "wget")
+    .apt_install("libgl1", "libglib2.0-0", "wget", "git")
+    # STEP 1 — install torch/numpy FIRST, in isolation.
+    # `basicsr`'s setup.py imports torch at install time to detect CUDA. If torch
+    # isn't present yet, its metadata generation crashes
+    # (metadata-generation-failed). numpy<2 is pinned because the older
+    # realesrgan/basicsr stack is not numpy-2 compatible.
     .pip_install(
-        "torch",
-        "torchvision",
         "numpy<2.0.0",
-        "pillow",
-        "opencv-python-headless",
-        "realesrgan",
-        "gfpgan",
-        "basicsr",
-        "facexlib",
+        "torch==2.1.2",
+        "torchvision==0.16.2",
     )
-    # basicsr imports torchvision.transforms.functional_tensor, removed in newer
-    # torchvision. Patch the installed file so the import resolves at runtime.
+    # STEP 2 — build tooling that basicsr/gfpgan need to generate metadata.
+    .pip_install("setuptools<70", "wheel", "Cython")
+    # STEP 3 — now install basicsr and friends WITHOUT build isolation, so their
+    # setup.py can import the torch we installed in step 1.
+    .run_commands(
+        "pip install --no-build-isolation "
+        "basicsr==1.4.2 facexlib==0.3.0 gfpgan==1.3.8 realesrgan==0.3.0"
+    )
+    # STEP 4 — remaining runtime deps.
+    .pip_install("pillow", "opencv-python-headless")
+    # STEP 5 — basicsr imports torchvision.transforms.functional_tensor, removed
+    # in newer torchvision. Patch the installed source so imports resolve.
     .run_commands(
         "python - <<'PY'\n"
         "import basicsr, os, glob\n"
