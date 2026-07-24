@@ -15,6 +15,8 @@ on a **serverless cloud GPU** (Modal). The web app is a static site you host on
   or grab everything as a `.zip`.
 - 🔀 **Before/after slider** — drag to inspect original vs. upscaled detail,
   with before/after dimensions and file sizes.
+- 🔒 **Deploy-your-own** — no shared backend; each user points the app at their
+  own Modal endpoint, so nobody spends anyone else's credits.
 - 🌑 **Sleek dark UI** — built with Vite + React + TypeScript + Tailwind.
 
 ---
@@ -81,6 +83,32 @@ Copy that URL — you'll paste it into the app's **Settings** (Backend type =
 container boots and downloads model weights; after that it's a few seconds each,
 and weights are cached on a Modal Volume across cold starts.
 
+### Staying at $0 — billing safety
+
+The backend is designed to **fail closed** (stop) rather than ever bill you.
+Three layers protect you:
+
+1. **Keep no payment method on Modal.** With no card on file, Modal *cannot*
+   charge you — it stops running apps when free credits/limit are reached. This
+   is your hardest guarantee. Do **not** "add a payment method to raise the
+   limit" unless you knowingly want paid usage.
+2. **Workspace usage limit.** Modal's free Starter plan enforces a hard spend
+   cap per billing cycle (e.g. $1). Running apps stop at the cap. Check it at
+   <https://modal.com/settings/usage>.
+3. **In-code guardrails** ([`modal_app/modal_app.py`](modal_app/modal_app.py)):
+   `max_containers=1` (only one GPU can ever run at once, so usage can't spike),
+   a per-request timeout, and input size/resolution caps that reject oversized
+   images *before* the GPU boots.
+
+**What "limit reached" looks like:** upscales fail with a clear message
+("monthly usage limit was reached… you are not billed"), and resume next cycle.
+The browser can't read your remaining credits — check the billing page above.
+
+A rough guide: a warm 8× upscale costs well under a cent of GPU time; a few
+hundred upscales/month fit inside the free credit. Cold starts (first request
+after idle) cost a little more, so batching many images in one session is
+cheaper than trickling one at a time.
+
 ---
 
 ## Part 2 — Configure & run the web app locally
@@ -94,11 +122,16 @@ npm run dev
 
 Open the printed localhost URL, click **Settings**, choose Backend type
 **Modal**, and paste your `.modal.run` endpoint URL from Part 1. That's it —
-the URL is stored only in your browser's `localStorage`.
+the URL is stored only in your browser's `localStorage` and is remembered on
+every future visit from that browser.
 
-To bake your endpoint in as the shipped default (so every visitor uses it
-without configuring), set `spaceId` in `DEFAULT_ENDPOINT` in
-[`src/types/index.ts`](src/types/index.ts) to your Modal URL.
+> **Keep your endpoint URL private.** The Modal endpoint has no password —
+> anyone who has the URL can send requests and spend *your* free credits. Don't
+> commit it, screenshot it, or bake it into a public build. Because it lives
+> only in your own browser's `localStorage`, visitors to your hosted site see an
+> unconfigured app and cannot use your backend. This is the intended
+> **deploy-your-own** model: every user runs their own Modal backend (see
+> [For other developers](#for-other-developers--deploy-your-own) below).
 
 ---
 
@@ -132,6 +165,49 @@ Tune both under **Advanced tiling** in the controls.
 
 ---
 
+## For other developers — deploy your own
+
+This app ships with **no default backend on purpose**. Each user runs their own
+Modal backend so nobody spends anyone else's credits. If you've forked this or
+landed on a hosted instance and want to use it, here's the whole flow:
+
+1. **Get a free Modal account** at <https://modal.com> (GitHub sign-in works).
+2. **Install & authenticate** (interactive, one time):
+   ```bash
+   pip install modal
+   modal setup
+   ```
+3. **Deploy the backend** from a clone of this repo:
+   ```bash
+   git clone https://github.com/<owner>/<repo>.git
+   cd <repo>
+   modal deploy modal_app/modal_app.py
+   ```
+   Copy the printed `https://<your-workspace>--img-upscaler-upscale.modal.run`.
+4. **Point the app at it:** open the app → **Settings** → Backend type **Modal**
+   → paste your URL → Save. Your URL is stored only in your browser.
+
+That's the entire cost model: your images run on *your* Modal free credits, and
+[billing safety](#staying-at-0--billing-safety) keeps it at $0.
+
+### Deploy troubleshooting
+
+The Real-ESRGAN dependency stack is version-sensitive; the image in
+[`modal_app/modal_app.py`](modal_app/modal_app.py) already handles the common
+pitfalls, but for reference:
+
+- `metadata-generation-failed` on `basicsr` → torch must be installed **before**
+  `basicsr` (its `setup.py` imports torch). The image installs torch first, then
+  `basicsr` with `--no-build-isolation`.
+- `RuntimeError: Numpy is not available` → torch 2.1.2 needs **numpy 1.x**;
+  transitive deps can pull numpy 2 back in. The image force-reinstalls
+  `numpy==1.26.4` **last** and self-checks the import at build time.
+- `FastAPI ... must be installed` → `fastapi[standard]` is included for the web
+  endpoint decorator.
+
+If your build still fails, the build log's last failing package is the clue —
+adjust the pins in `modal_app.py`.
+
 ## Alternative backend — Hugging Face Space (needs PRO)
 
 If you have Hugging Face **PRO**, you can host the Gradio backend in
@@ -150,7 +226,9 @@ included but usually fails in the browser due to CORS — prefer Modal.
 
 **Frontend:** Vite · React · TypeScript · Tailwind CSS · lucide-react ·
 `@gradio/client` (HF backends) · plain `fetch` (Modal) · JSZip · file-saver
-**Backend:** PyTorch · Real-ESRGAN · GFPGAN on **Modal** (T4) or HF ZeroGPU
+**Backend:** PyTorch · Real-ESRGAN · GFPGAN on **Modal** (T4, serverless,
+scale-to-zero) or HF ZeroGPU. Modal endpoint returns base64 PNG + result
+dimensions; the app maps usage-limit errors to a clear "not billed" message.
 
 ## Project structure
 
