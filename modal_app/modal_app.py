@@ -49,8 +49,9 @@ image = (
         "pip install --no-build-isolation "
         "basicsr==1.4.2 facexlib==0.3.0 gfpgan==1.3.8 realesrgan==0.3.0"
     )
-    # STEP 4 — remaining runtime deps.
-    .pip_install("pillow", "opencv-python-headless")
+    # STEP 4 — remaining runtime deps. fastapi is required by
+    # @modal.fastapi_endpoint (Modal no longer bundles it automatically).
+    .pip_install("pillow", "opencv-python-headless", "fastapi[standard]")
     # STEP 5 — RE-ASSERT numpy 1.x LAST. Steps 3–4 can silently pull numpy 2 back
     # in as a transitive dep, which is what breaks torch. Force it back with
     # --no-deps so nothing else is disturbed, then verify the stack imports.
