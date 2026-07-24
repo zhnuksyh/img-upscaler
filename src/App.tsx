@@ -11,7 +11,7 @@ import HistoryGallery from './components/HistoryGallery';
 
 import { resetClient, upscaleImage, UpscaleError } from './services/upscalerApi';
 import { downloadBatchZip, downloadJob } from './services/zipService';
-import { isUsingDefault, loadConfig, saveConfig } from './services/config';
+import { isEndpointConfigured, loadConfig, saveConfig } from './services/config';
 
 import {
   DEFAULT_OPTIONS,
@@ -53,7 +53,7 @@ export default function App() {
     };
   }, []);
 
-  const usingDefault = useMemo(() => isUsingDefault(config), [config]);
+  const configured = useMemo(() => isEndpointConfigured(config), [config]);
   const pendingCount = useMemo(
     () => jobs.filter((j) => j.status === 'queued' || j.status === 'error').length,
     [jobs],
@@ -102,6 +102,11 @@ export default function App() {
 
   const processAll = useCallback(async () => {
     if (processing) return;
+    // Nudge the user to configure a backend before their first upscale.
+    if (!isEndpointConfigured(config)) {
+      setSettingsOpen(true);
+      return;
+    }
     cancelRef.current = false;
     setProcessing(true);
 
@@ -220,7 +225,7 @@ export default function App() {
     <div className="min-h-full">
       <Header
         onOpenSettings={() => setSettingsOpen(true)}
-        usingDefaultEndpoint={usingDefault}
+        configured={configured}
       />
 
       <main className="mx-auto max-w-6xl px-4 py-6">
@@ -348,9 +353,9 @@ export default function App() {
             />
 
             <p className="mt-3 px-1 text-xs leading-relaxed text-slate-600">
-              All processing runs remotely on Hugging Face ZeroGPU. Your images
-              never touch a central server — the browser talks straight to the
-              Space and holds results in memory for this session only.
+              All processing runs remotely on a cloud GPU backend. Your images
+              never touch a central server — the browser talks straight to your
+              endpoint and holds results in memory for this session only.
             </p>
           </aside>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, KeyRound, RotateCcw, Server, X } from 'lucide-react';
-import { DEFAULT_ENDPOINT, type EndpointConfig } from '../types';
+import { DEFAULT_ENDPOINT, type EndpointApi, type EndpointConfig } from '../types';
 
 interface SettingsModalProps {
   open: boolean;
@@ -17,12 +17,14 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const [spaceId, setSpaceId] = useState(config.spaceId);
   const [hfToken, setHfToken] = useState(config.hfToken);
+  const [api, setApi] = useState<EndpointApi>(config.api);
 
   // Re-sync local form state whenever the modal is (re)opened.
   useEffect(() => {
     if (open) {
       setSpaceId(config.spaceId);
       setHfToken(config.hfToken);
+      setApi(config.api);
     }
   }, [open, config]);
 
@@ -39,6 +41,7 @@ export default function SettingsModal({
   const resetDefaults = () => {
     setSpaceId(DEFAULT_ENDPOINT.spaceId);
     setHfToken('');
+    setApi(DEFAULT_ENDPOINT.api);
   };
 
   return (
@@ -69,31 +72,70 @@ export default function SettingsModal({
 
         <div className="space-y-5 px-5 py-5">
           <p className="text-sm text-slate-400">
-            Bring your own free Hugging Face token to use your personal ZeroGPU
-            quota (~5&nbsp;min GPU/day). Settings are stored only in this
-            browser's <code className="text-slate-300">localStorage</code>.
+            Deploy the free <code className="text-slate-300">modal_app.py</code>{' '}
+            backend (see the README), then paste its endpoint URL below. Modal
+            gives free monthly GPU credits — no subscription. Settings are stored
+            only in this browser's{' '}
+            <code className="text-slate-300">localStorage</code>.
           </p>
+
+          <div className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-300">
+              Backend type
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ['modal', 'Modal', 'Serverless GPU · recommended'],
+                  ['custom', 'HF Space', "this repo's app.py"],
+                  ['community', 'Public HF', '/predict (may hit CORS)'],
+                ] as const
+              ).map(([value, title, sub]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setApi(value)}
+                  className={
+                    'rounded-lg border px-2.5 py-2 text-left text-xs transition-colors ' +
+                    (api === value
+                      ? 'border-brand-500 bg-brand-500/10 text-slate-200'
+                      : 'border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600')
+                  }
+                >
+                  <span className="block font-medium">{title}</span>
+                  <span className="block text-[11px] leading-tight text-slate-500">
+                    {sub}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <label className="block">
             <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-300">
               <Server size={14} className="text-slate-500" />
-              Space ID or URL
+              {api === 'modal' ? 'Modal endpoint URL' : 'Space ID or URL'}
             </span>
             <input
               type="text"
               value={spaceId}
               onChange={(e) => setSpaceId(e.target.value)}
-              placeholder="owner/space-name"
+              placeholder={
+                api === 'modal'
+                  ? 'https://you--img-upscaler-upscale.modal.run'
+                  : 'owner/space-name'
+              }
               spellCheck={false}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
             <span className="mt-1 block text-xs text-slate-500">
-              e.g. <code>owner/img-upscaler</code> or a full{' '}
-              <code>*.hf.space</code> URL.
+              {api === 'modal'
+                ? 'The URL printed by `modal deploy` (ends in .modal.run).'
+                : 'e.g. owner/img-upscaler or a full *.hf.space URL.'}
             </span>
           </label>
 
-          <label className="block">
+          <label className={api === 'modal' ? 'hidden' : 'block'}>
             <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-300">
               <KeyRound size={14} className="text-slate-500" />
               Hugging Face token{' '}
@@ -122,7 +164,7 @@ export default function SettingsModal({
         <div className="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-4">
           <button type="button" onClick={resetDefaults} className="btn-ghost text-xs">
             <RotateCcw size={14} />
-            Reset to community default
+            Reset
           </button>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="btn-secondary">
@@ -130,7 +172,7 @@ export default function SettingsModal({
             </button>
             <button
               type="button"
-              onClick={() => onSave({ spaceId, hfToken })}
+              onClick={() => onSave({ spaceId, hfToken, api })}
               className="btn-primary"
             >
               Save

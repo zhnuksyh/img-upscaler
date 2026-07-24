@@ -1,4 +1,14 @@
-import { DEFAULT_ENDPOINT, STORAGE_KEY, type EndpointConfig } from '../types';
+import {
+  DEFAULT_ENDPOINT,
+  STORAGE_KEY,
+  type EndpointApi,
+  type EndpointConfig,
+} from '../types';
+
+/** Coerce an arbitrary stored value into a valid EndpointApi. */
+function normalizeApi(value: unknown): EndpointApi {
+  return value === 'custom' || value === 'community' ? value : 'modal';
+}
 
 /** Read the persisted endpoint config, falling back to the community default. */
 export function loadConfig(): EndpointConfig {
@@ -9,6 +19,7 @@ export function loadConfig(): EndpointConfig {
     return {
       spaceId: parsed.spaceId?.trim() || DEFAULT_ENDPOINT.spaceId,
       hfToken: parsed.hfToken?.trim() || '',
+      api: normalizeApi(parsed.api),
     };
   } catch {
     return { ...DEFAULT_ENDPOINT };
@@ -20,15 +31,14 @@ export function saveConfig(config: EndpointConfig): void {
   const clean: EndpointConfig = {
     spaceId: config.spaceId.trim() || DEFAULT_ENDPOINT.spaceId,
     hfToken: config.hfToken.trim(),
+    api: normalizeApi(config.api),
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
 }
 
-/** True when the user is relying on the shared community endpoint. */
-export function isUsingDefault(config: EndpointConfig): boolean {
-  return (
-    config.spaceId.trim() === DEFAULT_ENDPOINT.spaceId && !config.hfToken.trim()
-  );
+/** True once the user has entered a backend endpoint (URL or Space id). */
+export function isEndpointConfigured(config: EndpointConfig): boolean {
+  return config.spaceId.trim().length > 0;
 }
 
 /**

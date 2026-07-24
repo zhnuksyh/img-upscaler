@@ -2,13 +2,14 @@ import { Github, Settings, Sparkles } from 'lucide-react';
 
 interface HeaderProps {
   onOpenSettings: () => void;
-  usingDefaultEndpoint: boolean;
+  /** Whether a backend endpoint has been configured. */
+  configured: boolean;
   githubUrl?: string;
 }
 
 export default function Header({
   onOpenSettings,
-  usingDefaultEndpoint,
+  configured,
   githubUrl = 'https://github.com/',
 }: HeaderProps) {
   return (
@@ -23,7 +24,7 @@ export default function Header({
               AI Image Upscaler
             </h1>
             <p className="text-xs text-slate-500">
-              Real-ESRGAN · ZeroGPU · 100% client-side
+              Real-ESRGAN · Cloud GPU · 100% client-side
             </p>
           </div>
         </div>
@@ -32,17 +33,17 @@ export default function Header({
           <span
             className={
               'hidden rounded-full px-2.5 py-1 text-xs font-medium ring-1 sm:inline-flex ' +
-              (usingDefaultEndpoint
-                ? 'bg-amber-500/10 text-amber-400 ring-amber-500/30'
-                : 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/30')
+              (configured
+                ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/30'
+                : 'bg-amber-500/10 text-amber-400 ring-amber-500/30')
             }
             title={
-              usingDefaultEndpoint
-                ? 'Using the shared community endpoint. Add your HF token in Settings for private quota.'
-                : 'Using your configured Space / token.'
+              configured
+                ? 'Backend endpoint configured.'
+                : 'No backend configured. Open Settings and paste your Modal endpoint URL.'
             }
           >
-            {usingDefaultEndpoint ? 'Community endpoint' : 'Your endpoint'}
+            {configured ? 'Endpoint set' : 'Set up endpoint'}
           </span>
 
           <a

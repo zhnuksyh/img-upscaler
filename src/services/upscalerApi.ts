@@ -99,18 +99,37 @@ export async function upscaleImage(
   config: EndpointConfig,
   onStatus?: (text: string) => void,
 ): Promise<Blob> {
+  // Modal endpoint: plain JSON fetch, no Gradio client (avoids the CORS issue
+  // entirely because the Modal endpoint sets its own CORS headers).
+  if (config.api === 'modal') {
+    return upscaleViaModal(file, options, config, onStatus);
+  }
+
   const client = await getClient(config);
 
-  let resultData: unknown[] | undefined;
-  try {
-    // Subscribe to queue status so the UI can reflect position/progress.
-    const submission = client.submit('/upscale', [
+  // Build the request for the target Space's API contract.
+  let endpoint: string;
+  let args: unknown[];
+  if (config.api === 'community') {
+    // Public Face-Real-ESRGAN: /predict(image, "2x"|"4x"|"8x").
+    endpoint = '/predict';
+    args = [file, `${options.scale}x`];
+  } else {
+    // Our own hf_space/app.py: /upscale(image, scale, face, tile, pad).
+    endpoint = '/upscale';
+    args = [
       file,
       options.scale,
       options.faceRestore,
       options.tileSize,
       options.tilePad,
-    ]);
+    ];
+  }
+
+  let resultData: unknown[] | undefined;
+  try {
+    // Subscribe to queue status so the UI can reflect position/progress.
+    const submission = client.submit(endpoint, args);
 
     for await (const msg of submission) {
       if (msg.type === 'status') {
@@ -152,6 +171,92 @@ export async function upscaleImage(
     throw new UpscaleError('The Space returned no image data.');
   }
   return blob;
+}
+
+/**
+ * Upscale via a Modal serverless-GPU web endpoint.
+ *
+ * Sends the image as base64 JSON and receives base64 PNG back. The Modal
+ * endpoint owns its CORS headers, so this works cross-origin from GitHub Pages
+ * without the credentialed-request problem the Gradio browser client has.
+ * Cold starts (container boot + model load) can take 20–60s; the status
+ * callback surfaces that as "warming up".
+ */
+async function upscaleViaModal(
+  file: File,
+  options: UpscaleOptions,
+  config: EndpointConfig,
+  onStatus?: (text: string) => void,
+): Promise<Blob> {
+  const url = config.spaceId.trim();
+  if (!url || !/^https?:\/\//i.test(url)) {
+    throw new UpscaleError(
+      'No Modal endpoint URL configured. Deploy modal_app.py and paste its URL in Settings.',
+    );
+  }
+
+  onStatus?.('Warming up GPU…');
+  const dataUrl = await fileToBase64(file);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: dataUrl,
+        scale: options.scale,
+        faceRestore: options.faceRestore,
+        tileSize: options.tileSize,
+        tilePad: options.tilePad,
+      }),
+    });
+  } catch (err) {
+    throw new UpscaleError(
+      'Could not reach the Modal endpoint. Check the URL and that it is deployed.',
+      { cause: err },
+    );
+  }
+
+  if (!res.ok) {
+    let detail = `Modal endpoint returned HTTP ${res.status}.`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) detail = body.error;
+    } catch {
+      /* non-JSON error body */
+    }
+    if (res.status === 429 || isQuotaSignal(detail)) {
+      throw new UpscaleError(GUEST_QUOTA_MESSAGE, { quota: true });
+    }
+    throw new UpscaleError(detail);
+  }
+
+  onStatus?.('Upscaling on GPU…');
+  const json = (await res.json()) as { image?: string; error?: string };
+  if (json.error) throw new UpscaleError(json.error);
+  if (!json.image) throw new UpscaleError('The Modal endpoint returned no image.');
+
+  return base64ToBlob(json.image, 'image/png');
+}
+
+/** Read a File as a base64 data URL. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Could not read the image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Decode a base64 (optionally data-URL) string into a Blob. */
+function base64ToBlob(b64: string, type: string): Blob {
+  const clean = b64.includes(',') ? b64.split(',', 2)[1] : b64;
+  const bytes = atob(clean);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type });
 }
 
 /** Gradio status.message may be a string or a list of validation errors. */

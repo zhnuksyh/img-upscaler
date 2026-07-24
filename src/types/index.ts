@@ -68,18 +68,46 @@ export interface GalleryItem {
   createdAt: number;
 }
 
+/**
+ * Which API contract the backend exposes.
+ * - `modal`: a Modal serverless-GPU web endpoint (this repo's `modal_app.py`).
+ *   Plain JSON `fetch` POST; the endpoint owner controls CORS, so browsers can
+ *   call it directly. This is the recommended $0/month, no-subscription path.
+ * - `custom`: the `hf_space/app.py` Gradio backend — endpoint `/upscale`,
+ *   args `[image, scale, faceRestore, tileSize, tilePad]` (requires a hosted
+ *   HF Space, which now needs a PRO plan to create).
+ * - `community`: a public Gradio Space — endpoint `/predict`,
+ *   args `[image, "2x"|"4x"|"8x"]`. NOTE: browsers are blocked from calling
+ *   third-party public Spaces by CORS (the Gradio client sends credentialed
+ *   requests the Space does not allow), so this generally only works when the
+ *   Space is same-origin or CORS-permissive. Kept for completeness.
+ */
+export type EndpointApi = 'modal' | 'custom' | 'community';
+
 /** Persisted endpoint configuration (localStorage). */
 export interface EndpointConfig {
-  /** Hugging Face Space id ("owner/space") or full URL. */
+  /**
+   * The backend identifier:
+   * - `modal`  → full endpoint URL (e.g. https://you--img-upscaler-upscale.modal.run)
+   * - `custom`/`community` → HF Space id ("owner/space") or *.hf.space URL
+   */
   spaceId: string;
-  /** Optional HF user access token to consume personal ZeroGPU quota. */
+  /** Optional HF user access token (Gradio backends only). */
   hfToken: string;
+  /** API contract of the target backend. */
+  api: EndpointApi;
 }
 
-/** Default community Space used when the user has not configured their own. */
+/**
+ * Default backend. Empty by default — the user must deploy their own Modal
+ * endpoint (see README) and paste its URL in Settings. We ship no shared
+ * default endpoint because there is no reliable free public one that browsers
+ * can reach (HF public Spaces are CORS-blocked; hosting a Space needs PRO).
+ */
 export const DEFAULT_ENDPOINT: EndpointConfig = {
-  spaceId: 'zhnuksyh/img-upscaler-zerogpu',
+  spaceId: '',
   hfToken: '',
+  api: 'modal',
 };
 
 export const STORAGE_KEY = 'img-upscaler:endpoint-config';

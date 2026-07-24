@@ -2,58 +2,84 @@
 
 A **free, $0/month, fully client-side** AI image upscaler. Real-ESRGAN
 super-resolution (2× / 4× / 8×) with optional GFPGAN face restoration, running
-on a **Hugging Face ZeroGPU** Space. The web app is a static site you can host
-on **GitHub Pages** — no backend server, no image storage, no bills.
+on a **serverless cloud GPU** (Modal). The web app is a static site you host on
+**GitHub Pages** — no server to run, no image storage, no bills.
 
-- 🚀 **100% cloud GPU** — all inference runs remotely on ZeroGPU; your device
-  only handles UI, encoding, and rendering.
+- 🚀 **100% cloud GPU** — all inference runs remotely; your device only handles
+  UI, encoding, and rendering. Works for photos, illustrations, anime, and art.
 - 🎛️ **High-quality output** — Real-ESRGAN x4plus with smart tiling + overlap
   padding to kill seams and avoid VRAM crashes.
 - 👤 **Face restoration** — optional GFPGAN pass for crisp, natural portraits.
+  (Leave it off for anime/cartoons — it's tuned for realistic human faces.)
 - 📦 **Batch mode** — drop many images, watch per-file progress, download each
   or grab everything as a `.zip`.
-- 🔀 **Before/after slider** — drag to inspect original vs. upscaled detail.
-- 🔑 **Bring your own token** — visitors can plug in their free Hugging Face
-  token to spend their **own** ZeroGPU quota (~5 min GPU/day ≈ 40–70 upscales).
+- 🔀 **Before/after slider** — drag to inspect original vs. upscaled detail,
+  with before/after dimensions and file sizes.
 - 🌑 **Sleek dark UI** — built with Vite + React + TypeScript + Tailwind.
 
 ---
 
+## Why Modal (and not a Hugging Face Space)?
+
+Hugging Face **now requires a PRO plan** to create Gradio/Docker Spaces (only
+Static Spaces stay free). And a browser **can't call a third-party public Space
+directly** — the Gradio web client sends credentialed requests that get blocked
+by CORS.
+
+**Modal** solves both: it has a **free monthly GPU-compute allowance (no
+subscription, no card required to start)**, and because *you* own the web
+endpoint, *you* set the CORS headers — so the GitHub Pages frontend can call it
+with a plain `fetch`. A container cold-starts a GPU, upscales one image, and
+scales back to zero; you're only billed per-second while it runs, which is
+pennies — thousands of upscales fit comfortably in the free allowance.
+
+> The Hugging Face Gradio backend is still included in [`hf_space/`](hf_space/)
+> as an alternative if you have HF PRO. See "Alternative backend" below.
+
 ## Architecture
 
 ```
-Browser (GitHub Pages, static)          Hugging Face Space (ZeroGPU)
-┌─────────────────────────────┐          ┌──────────────────────────────┐
-│ React UI                    │          │ Gradio app.py                │
-│  • DropZone / BatchQueue    │  image   │  • Real-ESRGAN x4plus         │
-│  • CompareSlider            │ ───────▶ │  • GFPGAN face restore        │
-│  • @gradio/client           │ ◀─────── │  • @spaces.GPU inference      │
-│  • JSZip export             │  result  │  • tiling + overlap padding   │
-└─────────────────────────────┘          └──────────────────────────────┘
+Browser (GitHub Pages, static)            Modal (serverless GPU)
+┌─────────────────────────────┐            ┌──────────────────────────────┐
+│ React UI                    │  base64    │ modal_app.py                 │
+│  • DropZone / BatchQueue    │   JSON     │  • Real-ESRGAN x4plus         │
+│  • CompareSlider            │ ─────────▶ │  • GFPGAN face restore        │
+│  • plain fetch (CORS-clean) │ ◀───────── │  • T4 GPU, scale-to-zero      │
+│  • JSZip export             │  base64    │  • tiling + overlap padding   │
+└─────────────────────────────┘            └──────────────────────────────┘
 ```
 
-Nothing is stored centrally. The browser talks straight to the Space and holds
-results in memory for the session only.
+Nothing is stored centrally. The browser talks straight to your endpoint and
+holds results in memory for the session only.
 
 ---
 
-## Part 1 — Deploy the Hugging Face Space (the GPU backend)
+## Part 1 — Deploy the Modal GPU backend
 
-1. Go to <https://huggingface.co/new-space>.
-2. **Space name**: e.g. `img-upscaler-zerogpu`.
-3. **SDK**: **Gradio**. **Hardware**: **ZeroGPU** (free).
-4. In the new Space, upload the two files from [`hf_space/`](hf_space/):
-   - [`hf_space/app.py`](hf_space/app.py)
-   - [`hf_space/requirements.txt`](hf_space/requirements.txt)
-5. The Space builds automatically. Model weights download on the first request
-   (give the first upscale ~30–60s of cold start).
+You need a free Modal account. **These steps are interactive and must be run by
+you** in a terminal (the auth step opens a browser):
 
-> **`basicsr` / torchvision compatibility.** Newer `torchvision` removed
-> `functional_tensor`, which older `basicsr` imports. `app.py` already ships a
-> shim at the top of the file that re-exposes it, so the Space builds cleanly on
-> current runtimes — no manual patch needed.
+```bash
+# 1. Install the Modal CLI
+pip install modal
 
-Your public Space id will be `your-username/img-upscaler-zerogpu`.
+# 2. Authenticate (opens a browser to link your account — one time)
+modal setup
+
+# 3. Deploy the backend from this repo
+modal deploy modal_app/modal_app.py
+```
+
+`modal deploy` prints a public URL ending in `.modal.run`, e.g.:
+
+```
+https://<your-workspace>--img-upscaler-upscale.modal.run
+```
+
+Copy that URL — you'll paste it into the app's **Settings** (Backend type =
+**Modal**). The **first** upscale after idle is slow (~20–60s) while the
+container boots and downloads model weights; after that it's a few seconds each,
+and weights are cached on a Modal Volume across cold starts.
 
 ---
 
@@ -66,22 +92,13 @@ npm install
 npm run dev
 ```
 
-Open the printed localhost URL. In the app's **Settings**, either:
+Open the printed localhost URL, click **Settings**, choose Backend type
+**Modal**, and paste your `.modal.run` endpoint URL from Part 1. That's it —
+the URL is stored only in your browser's `localStorage`.
 
-- keep the **community endpoint** (shared quota, good for a quick test), or
-- enter **your** Space id (`your-username/img-upscaler-zerogpu`) and, optionally,
-  a Hugging Face token to use your personal quota.
-
-Point the default at your own Space by editing `DEFAULT_ENDPOINT` in
-[`src/types/index.ts`](src/types/index.ts).
-
-### Getting a free Hugging Face token
-
-1. Sign in at <https://huggingface.co>.
-2. Go to **Settings → Access Tokens** (<https://huggingface.co/settings/tokens>).
-3. **Create new token** → type **Read** → copy the `hf_...` value.
-4. Paste it into the app's **Settings** modal. It's stored only in your
-   browser's `localStorage` and sent directly to Hugging Face.
+To bake your endpoint in as the shipped default (so every visitor uses it
+without configuring), set `spaceId` in `DEFAULT_ENDPOINT` in
+[`src/types/index.ts`](src/types/index.ts) to your Modal URL.
 
 ---
 
@@ -115,17 +132,32 @@ Tune both under **Advanced tiling** in the controls.
 
 ---
 
+## Alternative backend — Hugging Face Space (needs PRO)
+
+If you have Hugging Face **PRO**, you can host the Gradio backend in
+[`hf_space/`](hf_space/) instead of Modal:
+
+1. Create a **Gradio** Space with **ZeroGPU** hardware.
+2. Upload [`hf_space/app.py`](hf_space/app.py) and
+   [`hf_space/requirements.txt`](hf_space/requirements.txt) to its root.
+3. In the app's **Settings**, set Backend type **HF Space** and enter your Space
+   id (`your-username/your-space`). Add a Hugging Face token for private quota.
+
+The **Public HF** backend type (calling *someone else's* public Space) is
+included but usually fails in the browser due to CORS — prefer Modal.
+
 ## Tech stack
 
 **Frontend:** Vite · React · TypeScript · Tailwind CSS · lucide-react ·
-`@gradio/client` · JSZip · file-saver
-**Backend:** Gradio · PyTorch · Real-ESRGAN · GFPGAN on Hugging Face ZeroGPU
+`@gradio/client` (HF backends) · plain `fetch` (Modal) · JSZip · file-saver
+**Backend:** PyTorch · Real-ESRGAN · GFPGAN on **Modal** (T4) or HF ZeroGPU
 
 ## Project structure
 
 ```
 .github/workflows/deploy.yml   GitHub Pages CI/CD
-hf_space/                      HF ZeroGPU Space (app.py + requirements.txt)
+modal_app/modal_app.py         Modal serverless-GPU backend (recommended)
+hf_space/                      HF Gradio Space backend (needs PRO)
 src/
   components/                  UI (DropZone, BatchQueue, CompareSlider, …)
   services/                    upscalerApi, zipService, config
