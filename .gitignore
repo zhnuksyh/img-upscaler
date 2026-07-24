@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.local
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Python (HF Space local testing)
+hf_space/__pycache__/
+hf_space/.venv/
+hf_space/weights/
+*.pyc
