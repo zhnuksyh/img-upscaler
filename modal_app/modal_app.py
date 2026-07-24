@@ -30,27 +30,39 @@ import modal
 image = (
     modal.Image.debian_slim(python_version="3.10")
     .apt_install("libgl1", "libglib2.0-0", "wget", "git")
-    # STEP 1 — install torch/numpy FIRST, in isolation.
+    # STEP 1 — install torch + numpy 1.x FIRST, in isolation.
     # `basicsr`'s setup.py imports torch at install time to detect CUDA. If torch
     # isn't present yet, its metadata generation crashes
-    # (metadata-generation-failed). numpy<2 is pinned because the older
-    # realesrgan/basicsr stack is not numpy-2 compatible.
+    # (metadata-generation-failed). numpy is pinned to 1.x because torch 2.1.2
+    # was built against numpy 1 — numpy 2 breaks `torch.from_numpy`
+    # ("Numpy is not available").
     .pip_install(
-        "numpy<2.0.0",
+        "numpy==1.26.4",
         "torch==2.1.2",
         "torchvision==0.16.2",
     )
     # STEP 2 — build tooling that basicsr/gfpgan need to generate metadata.
     .pip_install("setuptools<70", "wheel", "Cython")
-    # STEP 3 — now install basicsr and friends WITHOUT build isolation, so their
-    # setup.py can import the torch we installed in step 1.
+    # STEP 3 — install basicsr and friends WITHOUT build isolation, so their
+    # setup.py can import the torch from step 1.
     .run_commands(
         "pip install --no-build-isolation "
         "basicsr==1.4.2 facexlib==0.3.0 gfpgan==1.3.8 realesrgan==0.3.0"
     )
     # STEP 4 — remaining runtime deps.
     .pip_install("pillow", "opencv-python-headless")
-    # STEP 5 — basicsr imports torchvision.transforms.functional_tensor, removed
+    # STEP 5 — RE-ASSERT numpy 1.x LAST. Steps 3–4 can silently pull numpy 2 back
+    # in as a transitive dep, which is what breaks torch. Force it back with
+    # --no-deps so nothing else is disturbed, then verify the stack imports.
+    .run_commands(
+        "pip install --no-deps --force-reinstall 'numpy==1.26.4'",
+        # Fail the BUILD (not the first request) if the combo is still broken.
+        "python -c 'import numpy, torch; "
+        "print(\"numpy\", numpy.__version__, \"torch\", torch.__version__); "
+        "torch.from_numpy(numpy.zeros(1)); "
+        "import basicsr, realesrgan, gfpgan; print(\"stack OK\")'",
+    )
+    # STEP 6 — basicsr imports torchvision.transforms.functional_tensor, removed
     # in newer torchvision. Patch the installed source so imports resolve.
     .run_commands(
         "python - <<'PY'\n"
