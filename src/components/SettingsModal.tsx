@@ -135,6 +135,26 @@ export default function SettingsModal({
             </span>
           </label>
 
+          {api === 'modal' && (
+            <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2.5 text-xs leading-relaxed text-slate-400">
+              <p>
+                Modal stops the backend when your monthly usage limit is reached
+                — so you're never billed, it just pauses until the next cycle.
+                The browser can't read your remaining credits; check usage on
+                your{' '}
+                <a
+                  href="https://modal.com/settings/usage"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-0.5 text-brand-400 hover:text-brand-300"
+                >
+                  Modal billing page <ExternalLink size={11} />
+                </a>
+                .
+              </p>
+            </div>
+          )}
+
           <label className={api === 'modal' ? 'hidden' : 'block'}>
             <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-300">
               <KeyRound size={14} className="text-slate-500" />

@@ -51,6 +51,24 @@ function isQuotaSignal(input: unknown): boolean {
 const GUEST_QUOTA_MESSAGE =
   'Daily free GPU limit reached for your connection. Try again tomorrow, or add your Hugging Face token in Settings for a higher limit.';
 
+const MODAL_QUOTA_MESSAGE =
+  "The Modal backend's monthly usage limit was reached, so it stopped to avoid charges. Upscaling resumes next billing cycle — or raise the limit in your Modal dashboard. (You are not billed.)";
+
+/** Detect a Modal workspace usage-limit / app-stopped signal in an error body. */
+function isModalLimitSignal(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    t.includes('usage limit') ||
+    t.includes('spending limit') ||
+    t.includes('quota') ||
+    t.includes('billing') ||
+    t.includes('payment') ||
+    t.includes('has been stopped') ||
+    t.includes('app is stopped') ||
+    t.includes('credits')
+  );
+}
+
 let cached: { key: string; client: Promise<Client> } | null = null;
 
 function endpointKey(config: EndpointConfig): string {
@@ -213,7 +231,7 @@ async function upscaleViaModal(
     });
   } catch (err) {
     throw new UpscaleError(
-      'Could not reach the Modal endpoint. Check the URL and that it is deployed.',
+      'Could not reach the Modal endpoint. Check the URL, that it is deployed, and that the backend has not hit its monthly usage limit.',
       { cause: err },
     );
   }
@@ -226,8 +244,15 @@ async function upscaleViaModal(
     } catch {
       /* non-JSON error body */
     }
-    if (res.status === 429 || isQuotaSignal(detail)) {
-      throw new UpscaleError(GUEST_QUOTA_MESSAGE, { quota: true });
+    // Modal stops apps when the workspace usage limit is reached; that surfaces
+    // as a billing/limit status or message rather than a clean 429.
+    if (
+      res.status === 429 ||
+      res.status === 402 ||
+      res.status === 403 ||
+      isModalLimitSignal(detail)
+    ) {
+      throw new UpscaleError(MODAL_QUOTA_MESSAGE, { quota: true });
     }
     throw new UpscaleError(detail);
   }
