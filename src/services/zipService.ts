@@ -1,0 +1,72 @@
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import type { UpscaleJob } from '../types';
+
+/** Derive an output filename like "photo_4x.png" from a source file name. */
+export function upscaledFileName(
+  originalName: string,
+  scale: number,
+  blob?: Blob,
+): string {
+  const dot = originalName.lastIndexOf('.');
+  const base = dot > 0 ? originalName.slice(0, dot) : originalName;
+  const ext = extForBlob(blob);
+  return `${base}_${scale}x.${ext}`;
+}
+
+function extForBlob(blob?: Blob): string {
+  switch (blob?.type) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/webp':
+      return 'webp';
+    default:
+      return 'png';
+  }
+}
+
+/** Download a single completed job's result. */
+export function downloadJob(job: UpscaleJob): void {
+  if (!job.resultBlob) return;
+  saveAs(
+    job.resultBlob,
+    upscaledFileName(job.file.name, job.options.scale, job.resultBlob),
+  );
+}
+
+/**
+ * Bundle every completed job into a single .zip and trigger a download.
+ * De-duplicates colliding filenames by appending an index.
+ */
+export async function downloadBatchZip(
+  jobs: UpscaleJob[],
+  zipName = 'upscaled-images.zip',
+): Promise<void> {
+  const completed = jobs.filter((j) => j.status === 'done' && j.resultBlob);
+  if (completed.length === 0) return;
+
+  const zip = new JSZip();
+  const used = new Set<string>();
+
+  for (const job of completed) {
+    let name = upscaledFileName(job.file.name, job.options.scale, job.resultBlob);
+    if (used.has(name)) {
+      const dot = name.lastIndexOf('.');
+      const base = name.slice(0, dot);
+      const ext = name.slice(dot);
+      let i = 2;
+      while (used.has(`${base}-${i}${ext}`)) i++;
+      name = `${base}-${i}${ext}`;
+    }
+    used.add(name);
+    zip.file(name, job.resultBlob!);
+  }
+
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    // Images are already compressed; keep zip fast with a light level.
+    compressionOptions: { level: 1 },
+  });
+  saveAs(blob, zipName);
+}
