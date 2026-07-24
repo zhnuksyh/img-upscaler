@@ -12,11 +12,44 @@ import { normalizeSpaceId } from './config';
  */
 
 export class UpscaleError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
+  /** True when the failure is a GPU quota / rate-limit (HTTP 429) exhaustion. */
+  readonly quota: boolean;
+  constructor(message: string, opts: { cause?: unknown; quota?: boolean } = {}) {
     super(message);
     this.name = 'UpscaleError';
+    this.cause = opts.cause;
+    this.quota = opts.quota ?? false;
   }
+  readonly cause?: unknown;
 }
+
+/**
+ * Detect a ZeroGPU quota / rate-limit signal from an error or status message.
+ * Gradio wraps the underlying HTTP response, so we match on the surfaced text
+ * (status code 429, "quota", "gpu", "exceeded", "rate limit", …).
+ */
+function isQuotaSignal(input: unknown): boolean {
+  const text = (
+    typeof input === 'string'
+      ? input
+      : input instanceof Error
+        ? `${input.message}`
+        : ''
+  ).toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes('429') ||
+    text.includes('quota') ||
+    text.includes('rate limit') ||
+    text.includes('rate-limit') ||
+    text.includes('too many requests') ||
+    text.includes('exceeded your gpu') ||
+    (text.includes('gpu') && text.includes('exceeded'))
+  );
+}
+
+const GUEST_QUOTA_MESSAGE =
+  'Daily free GPU limit reached for your connection. Try again tomorrow, or add your Hugging Face token in Settings for a higher limit.';
 
 let cached: { key: string; client: Promise<Client> } | null = null;
 
@@ -38,7 +71,7 @@ async function getClient(config: EndpointConfig): Promise<Client> {
     cached = null; // allow retry on next call
     throw new UpscaleError(
       `Could not connect to Space "${target}". Check the Space id/URL and that it is running.`,
-      err,
+      { cause: err },
     );
   });
 
@@ -82,7 +115,11 @@ export async function upscaleImage(
     for await (const msg of submission) {
       if (msg.type === 'status') {
         if (msg.stage === 'error') {
-          throw new UpscaleError(statusMessage(msg.message));
+          const detail = statusMessage(msg.message);
+          if (isQuotaSignal(detail)) {
+            throw new UpscaleError(GUEST_QUOTA_MESSAGE, { quota: true });
+          }
+          throw new UpscaleError(detail);
         }
         if (onStatus) {
           if (msg.stage === 'pending') {
@@ -101,9 +138,12 @@ export async function upscaleImage(
     }
   } catch (err) {
     if (err instanceof UpscaleError) throw err;
+    if (isQuotaSignal(err)) {
+      throw new UpscaleError(GUEST_QUOTA_MESSAGE, { cause: err, quota: true });
+    }
     throw new UpscaleError(
-      'Upscaling failed. The Space may be starting, rate-limited, or out of daily GPU quota.',
-      err,
+      'Upscaling failed. The Space may be starting or temporarily unavailable.',
+      { cause: err },
     );
   }
 

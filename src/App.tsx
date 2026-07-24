@@ -163,6 +163,10 @@ export default function App() {
             ? err.message
             : 'Unexpected error during upscaling.';
         patchJob(id, { status: 'error', progress: 0, message });
+
+        // A quota/rate-limit failure will hit every remaining job the same
+        // way — stop the batch so the rest stay queued and retryable later.
+        if (err instanceof UpscaleError && err.quota) break;
       }
     }
 
