@@ -1,0 +1,199 @@
+import { Loader2, ScanFace, Sparkles, Wand2, X } from 'lucide-react';
+import type { ScaleFactor, UpscaleOptions } from '../types';
+import { cx } from '../utils';
+
+interface ControlsProps {
+  options: UpscaleOptions;
+  onChange: (next: UpscaleOptions) => void;
+  onUpscaleAll: () => void;
+  onCancel: () => void;
+  onClear: () => void;
+  processing: boolean;
+  pendingCount: number;
+  hasJobs: boolean;
+}
+
+const SCALES: ScaleFactor[] = [2, 4, 8];
+
+export default function Controls({
+  options,
+  onChange,
+  onUpscaleAll,
+  onCancel,
+  onClear,
+  processing,
+  pendingCount,
+  hasJobs,
+}: ControlsProps) {
+  return (
+    <div className="card flex flex-col gap-5 p-5">
+      {/* Scale factor */}
+      <div>
+        <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
+          Scale factor
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {SCALES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={processing}
+              onClick={() => onChange({ ...options, scale: s })}
+              className={cx(
+                'rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50',
+                options.scale === s
+                  ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600',
+              )}
+            >
+              {s}×
+            </button>
+          ))}
+        </div>
+        {options.scale === 8 && (
+          <p className="mt-2 text-xs text-slate-500">
+            8× runs a multi-pass 4× → 2× pipeline for stability.
+          </p>
+        )}
+      </div>
+
+      {/* Face restore */}
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={options.faceRestore}
+          disabled={processing}
+          onChange={(e) => onChange({ ...options, faceRestore: e.target.checked })}
+          className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-900"
+        />
+        <span className="flex-1">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
+            <ScanFace size={15} className="text-slate-400" />
+            Face restoration
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            GFPGAN enhancement for portraits and human faces.
+          </span>
+        </span>
+      </label>
+
+      {/* Tiling (advanced) */}
+      <details className="group">
+        <summary className="cursor-pointer list-none text-xs font-medium text-slate-400 hover:text-slate-300">
+          <span className="inline-flex items-center gap-1.5">
+            <Sparkles size={13} /> Advanced tiling
+          </span>
+        </summary>
+        <div className="mt-3 space-y-3">
+          <Range
+            label="Tile size"
+            value={options.tileSize}
+            min={0}
+            max={1024}
+            step={64}
+            suffix={options.tileSize === 0 ? 'off' : 'px'}
+            disabled={processing}
+            onChange={(v) => onChange({ ...options, tileSize: v })}
+          />
+          <Range
+            label="Tile padding"
+            value={options.tilePad}
+            min={0}
+            max={64}
+            step={2}
+            suffix="px"
+            disabled={processing}
+            onChange={(v) => onChange({ ...options, tilePad: v })}
+          />
+          <p className="text-xs text-slate-500">
+            Overlap padding prevents visible seams and avoids GPU out-of-memory
+            errors on large images.
+          </p>
+        </div>
+      </details>
+
+      {/* Actions */}
+      <div className="flex flex-col gap-2 border-t border-slate-800 pt-4">
+        <button
+          type="button"
+          onClick={onUpscaleAll}
+          disabled={processing || pendingCount === 0}
+          className="btn-primary w-full"
+        >
+          {processing ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              Processing…
+            </>
+          ) : (
+            <>
+              <Wand2 size={16} />
+              Upscale {pendingCount > 0 ? `${pendingCount} image${pendingCount > 1 ? 's' : ''}` : 'all'}
+            </>
+          )}
+        </button>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={!processing}
+            className="btn-secondary"
+          >
+            <X size={15} />
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={processing || !hasJobs}
+            className="btn-secondary"
+          >
+            Clear all
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Range({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix: string;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 flex items-center justify-between text-xs text-slate-400">
+        {label}
+        <span className="font-mono text-slate-300">
+          {value} {suffix}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 accent-brand-500 disabled:opacity-50"
+      />
+    </label>
+  );
+}
