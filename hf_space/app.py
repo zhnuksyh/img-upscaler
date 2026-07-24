@@ -18,6 +18,22 @@ The frontend calls the ``/upscale`` API endpoint via ``@gradio/client``.
 """
 
 import os
+import sys
+import types
+
+# --- basicsr / torchvision compatibility shim -------------------------------
+# Newer torchvision removed `torchvision.transforms.functional_tensor`, which
+# older `basicsr` still imports. Re-expose the moved symbol so the model
+# libraries import cleanly on current runtimes.
+try:  # pragma: no cover - environment dependent
+    import torchvision.transforms.functional as _tvf
+
+    if "torchvision.transforms.functional_tensor" not in sys.modules:
+        _shim = types.ModuleType("torchvision.transforms.functional_tensor")
+        _shim.rgb_to_grayscale = _tvf.rgb_to_grayscale
+        sys.modules["torchvision.transforms.functional_tensor"] = _shim
+except Exception:  # noqa: BLE001 - best-effort shim
+    pass
 
 import gradio as gr
 import numpy as np
