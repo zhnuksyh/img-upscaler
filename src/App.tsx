@@ -8,6 +8,7 @@ import BatchQueue from './components/BatchQueue';
 import CompareSlider from './components/CompareSlider';
 import SettingsModal from './components/SettingsModal';
 import HistoryGallery from './components/HistoryGallery';
+import TargetSizeExport from './components/TargetSizeExport';
 
 import { resetClient, upscaleImage, UpscaleError } from './services/upscalerApi';
 import { downloadBatchZip, downloadJob } from './services/zipService';
@@ -284,6 +285,7 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+                <TargetSizeExport job={selectedJob} />
               </section>
             ) : selectedJob ? (
               <section className="card animate-fade-in overflow-hidden">
@@ -306,7 +308,7 @@ export default function App() {
                     </span>
                   )}
                 </h2>
-                {completedCount > 1 && (
+                {completedCount >= 1 && (
                   <button
                     type="button"
                     onClick={handleZip}
