@@ -49,6 +49,11 @@ export interface UpscaleJob {
   /** Original image natural dimensions, filled on load. */
   width?: number;
   height?: number;
+  /** Upscaled result natural dimensions, filled on completion. */
+  resultWidth?: number;
+  resultHeight?: number;
+  /** Upscaled result byte size, filled on completion. */
+  resultSize?: number;
   createdAt: number;
 }
 

@@ -20,7 +20,7 @@ import {
   type UpscaleJob,
   type UpscaleOptions,
 } from './types';
-import { readImageSize, uid } from './utils';
+import { formatBytes, readImageSize, uid } from './utils';
 
 export default function App() {
   const [config, setConfig] = useState<EndpointConfig>(() => loadConfig());
@@ -136,11 +136,16 @@ export default function App() {
         }
 
         const resultUrl = trackUrl(URL.createObjectURL(blob));
+        // Read the upscaled dimensions so the UI can show before → after.
+        const resultSize = await readImageSize(resultUrl).catch(() => null);
         patchJob(id, {
           status: 'done',
           progress: 100,
           resultBlob: blob,
           resultUrl,
+          resultWidth: resultSize?.width,
+          resultHeight: resultSize?.height,
+          resultSize: blob.size,
           message: undefined,
         });
         setSelectedId(id);
@@ -244,6 +249,36 @@ export default function App() {
                   beforeUrl={selectedJob.originalUrl}
                   afterUrl={selectedJob.resultUrl}
                 />
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div className="card px-3 py-2">
+                    <p className="text-slate-500">Before</p>
+                    <p className="mt-0.5 font-medium text-slate-300">
+                      {selectedJob.width && selectedJob.height
+                        ? `${selectedJob.width} × ${selectedJob.height} px`
+                        : '—'}
+                      <span className="text-slate-500">
+                        {' · '}
+                        {formatBytes(selectedJob.file.size)}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="card px-3 py-2">
+                    <p className="text-brand-400/80">
+                      After · {selectedJob.options.scale}×
+                    </p>
+                    <p className="mt-0.5 font-medium text-slate-200">
+                      {selectedJob.resultWidth && selectedJob.resultHeight
+                        ? `${selectedJob.resultWidth} × ${selectedJob.resultHeight} px`
+                        : '—'}
+                      <span className="text-slate-500">
+                        {' · '}
+                        {selectedJob.resultSize
+                          ? formatBytes(selectedJob.resultSize)
+                          : '—'}
+                      </span>
+                    </p>
+                  </div>
+                </div>
               </section>
             ) : selectedJob ? (
               <section className="card animate-fade-in overflow-hidden">
