@@ -25,6 +25,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Local project notes / AI assistant context (not for the public repo)
+CLAUDE.md
+
 # Python (HF Space local testing)
 hf_space/__pycache__/
 hf_space/.venv/

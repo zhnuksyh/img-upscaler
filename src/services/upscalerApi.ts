@@ -68,7 +68,7 @@ export async function upscaleImage(
 ): Promise<Blob> {
   const client = await getClient(config);
 
-  let result: Awaited<ReturnType<Client['predict']>>;
+  let resultData: unknown[] | undefined;
   try {
     // Subscribe to queue status so the UI can reflect position/progress.
     const submission = client.submit('/upscale', [
@@ -82,13 +82,13 @@ export async function upscaleImage(
     for await (const msg of submission) {
       if (msg.type === 'status') {
         if (msg.stage === 'error') {
-          throw new UpscaleError(msg.message || 'The Space reported an error.');
+          throw new UpscaleError(statusMessage(msg.message));
         }
         if (onStatus) {
           if (msg.stage === 'pending') {
             onStatus(
-              msg.queue && typeof msg.rank === 'number'
-                ? `Queued (#${msg.rank + 1})…`
+              typeof msg.position === 'number' && msg.position > 0
+                ? `Queued (#${msg.position + 1})…`
                 : 'Queued…',
             );
           } else if (msg.stage === 'generating') {
@@ -96,7 +96,7 @@ export async function upscaleImage(
           }
         }
       } else if (msg.type === 'data') {
-        result = msg as Awaited<ReturnType<Client['predict']>>;
+        resultData = msg.data;
       }
     }
   } catch (err) {
@@ -107,21 +107,28 @@ export async function upscaleImage(
     );
   }
 
-  const blob = await extractBlob(result);
+  const blob = await extractBlob(resultData);
   if (!blob) {
     throw new UpscaleError('The Space returned no image data.');
   }
   return blob;
 }
 
+/** Gradio status.message may be a string or a list of validation errors. */
+function statusMessage(
+  message: string | { message: string }[] | undefined,
+): string {
+  if (!message) return 'The Space reported an error.';
+  if (typeof message === 'string') return message;
+  return message.map((m) => m.message).join('; ') || 'The Space reported an error.';
+}
+
 /**
  * The Gradio image output can arrive as a { url, path } descriptor or a Blob.
  * Resolve it into a real Blob we can preview, download, and zip.
  */
-async function extractBlob(
-  result: Awaited<ReturnType<Client['predict']>> | undefined,
-): Promise<Blob | null> {
-  const payload = result?.data?.[0] as unknown;
+async function extractBlob(data: unknown[] | undefined): Promise<Blob | null> {
+  const payload = data?.[0];
   if (!payload) return null;
 
   if (payload instanceof Blob) return payload;

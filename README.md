@@ -7,7 +7,7 @@ on **GitHub Pages** — no backend server, no image storage, no bills.
 
 - 🚀 **100% cloud GPU** — all inference runs remotely on ZeroGPU; your device
   only handles UI, encoding, and rendering.
-- 🎛️ **iLoveIMG-level quality** — Real-ESRGAN x4plus with smart tiling + overlap
+- 🎛️ **High-quality output** — Real-ESRGAN x4plus with smart tiling + overlap
   padding to kill seams and avoid VRAM crashes.
 - 👤 **Face restoration** — optional GFPGAN pass for crisp, natural portraits.
 - 📦 **Batch mode** — drop many images, watch per-file progress, download each
