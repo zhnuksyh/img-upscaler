@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, KeyRound, RotateCcw, Server, X } from 'lucide-react';
+import {
+  ExternalLink,
+  Eye,
+  EyeOff,
+  KeyRound,
+  RotateCcw,
+  Server,
+  X,
+} from 'lucide-react';
 import { DEFAULT_ENDPOINT, type EndpointApi, type EndpointConfig } from '../types';
 
 interface SettingsModalProps {
@@ -18,6 +26,7 @@ export default function SettingsModal({
   const [spaceId, setSpaceId] = useState(config.spaceId);
   const [hfToken, setHfToken] = useState(config.hfToken);
   const [api, setApi] = useState<EndpointApi>(config.api);
+  const [showSpaceId, setShowSpaceId] = useState(false);
 
   // Re-sync local form state whenever the modal is (re)opened.
   useEffect(() => {
@@ -25,6 +34,7 @@ export default function SettingsModal({
       setSpaceId(config.spaceId);
       setHfToken(config.hfToken);
       setApi(config.api);
+      setShowSpaceId(false);
     }
   }, [open, config]);
 
@@ -116,18 +126,31 @@ export default function SettingsModal({
               <Server size={14} className="text-slate-500" />
               {api === 'modal' ? 'Modal endpoint URL' : 'Space ID or URL'}
             </span>
-            <input
-              type="text"
-              value={spaceId}
-              onChange={(e) => setSpaceId(e.target.value)}
-              placeholder={
-                api === 'modal'
-                  ? 'https://you--img-upscaler-upscale.modal.run'
-                  : 'owner/space-name'
-              }
-              spellCheck={false}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
+            <div className="relative">
+              <input
+                type={showSpaceId ? 'text' : 'password'}
+                value={spaceId}
+                onChange={(e) => setSpaceId(e.target.value)}
+                placeholder={
+                  api === 'modal'
+                    ? 'https://you--img-upscaler-upscale.modal.run'
+                    : 'owner/space-name'
+                }
+                spellCheck={false}
+                autoComplete="off"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-10 text-sm text-slate-100 placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSpaceId((v) => !v)}
+                aria-label={showSpaceId ? 'Hide endpoint' : 'Show endpoint'}
+                aria-pressed={showSpaceId}
+                title={showSpaceId ? 'Hide' : 'Show'}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-300"
+              >
+                {showSpaceId ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
             <span className="mt-1 block text-xs text-slate-500">
               {api === 'modal'
                 ? 'The URL printed by `modal deploy` (ends in .modal.run).'
