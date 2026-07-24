@@ -1,0 +1,3 @@
+# Local tooling to deploy the Modal backend. The GPU container's own
+# dependencies are declared inside modal_app.py (modal.Image), not here.
+modal
