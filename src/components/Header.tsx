@@ -10,7 +10,7 @@ interface HeaderProps {
 export default function Header({
   onOpenSettings,
   configured,
-  githubUrl = 'https://github.com/',
+  githubUrl = 'https://github.com/zhnuksyh/img-upscaler',
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
@@ -46,25 +46,26 @@ export default function Header({
             {configured ? 'Endpoint set' : 'Set up endpoint'}
           </span>
 
+          {/* Icon-only: aria-label carries the accessible name, title the tooltip. */}
           <a
             href={githubUrl}
             target="_blank"
             rel="noreferrer noopener"
-            className="btn-ghost"
+            className="btn-ghost px-2"
             aria-label="View source on GitHub"
+            title="View source on GitHub"
           >
             <Github size={18} />
-            <span className="hidden sm:inline">GitHub</span>
           </a>
 
           <button
             type="button"
             onClick={onOpenSettings}
-            className="btn-secondary"
+            className="btn-secondary px-2"
             aria-label="Open settings"
+            title="Open settings"
           >
             <Settings size={18} />
-            <span className="hidden sm:inline">Settings</span>
           </button>
         </div>
       </div>
