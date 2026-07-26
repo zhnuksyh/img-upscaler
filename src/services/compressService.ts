@@ -22,7 +22,7 @@ export interface CompressResult {
 }
 
 /** Decode a Blob into an ImageBitmap (falls back to <img> where unsupported). */
-async function decode(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
+export async function decode(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
   if (typeof createImageBitmap === 'function') {
     try {
       return await createImageBitmap(blob);
@@ -43,8 +43,12 @@ async function decode(blob: Blob): Promise<ImageBitmap | HTMLImageElement> {
   }
 }
 
-function drawToCanvas(
-  source: ImageBitmap | HTMLImageElement,
+/**
+ * Draw `source` into a fresh canvas at the given size. Accepts a canvas as the
+ * source too, so callers can resample in repeated steps.
+ */
+export function drawToCanvas(
+  source: CanvasImageSource,
   width: number,
   height: number,
 ): HTMLCanvasElement {
@@ -73,7 +77,7 @@ function encode(
 }
 
 /** Source dimensions of a decoded image/bitmap. */
-function dims(source: ImageBitmap | HTMLImageElement): { w: number; h: number } {
+export function dims(source: ImageBitmap | HTMLImageElement): { w: number; h: number } {
   const w = 'width' in source && typeof source.width === 'number' ? source.width : 0;
   const h = 'height' in source && typeof source.height === 'number' ? source.height : 0;
   return {

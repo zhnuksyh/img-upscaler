@@ -1,6 +1,6 @@
 import { Loader2, ScanFace, Sparkles, Wand2, X } from 'lucide-react';
 import type { ScaleFactor, UpscaleOptions } from '../types';
-import { cx } from '../utils';
+import { cx, formatScale } from '../utils';
 
 interface ControlsProps {
   options: UpscaleOptions;
@@ -13,7 +13,9 @@ interface ControlsProps {
   hasJobs: boolean;
 }
 
-const SCALES: ScaleFactor[] = [2, 4, 8];
+const UPSCALES: ScaleFactor[] = [2, 4, 8];
+/** Sub-1x factors, resampled in the browser with no GPU call. */
+const DOWNSCALES: ScaleFactor[] = [0.25, 0.5, 0.75];
 
 export default function Controls({
   options,
@@ -25,15 +27,19 @@ export default function Controls({
   pendingCount,
   hasJobs,
 }: ControlsProps) {
+  // A sub-1x factor is resampled in the browser, so the GPU-only settings
+  // (face restoration, tiling) don't apply and the action verb changes.
+  const local = options.scale < 1;
+
   return (
     <div className="card flex flex-col gap-5 p-5">
       {/* Scale factor */}
       <div>
         <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
-          Scale factor
+          Enlarge · AI upscale
         </label>
         <div className="grid grid-cols-3 gap-2">
-          {SCALES.map((s) => (
+          {UPSCALES.map((s) => (
             <button
               key={s}
               type="button"
@@ -46,24 +52,58 @@ export default function Controls({
                   : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600',
               )}
             >
-              {s}×
+              {formatScale(s)}
             </button>
           ))}
         </div>
+
+        <label className="mb-2 mt-4 block text-xs font-medium uppercase tracking-wide text-slate-400">
+          Shrink · in browser
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {DOWNSCALES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={processing}
+              onClick={() => onChange({ ...options, scale: s })}
+              className={cx(
+                'rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50',
+                options.scale === s
+                  ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600',
+              )}
+            >
+              {formatScale(s)}
+            </button>
+          ))}
+        </div>
+
         {options.scale === 8 && (
           <p className="mt-2 text-xs text-slate-500">
             8× enlarges the 4× model output, so it adds size rather than extra
             detail.
           </p>
         )}
+        {options.scale < 1 && (
+          <p className="mt-2 text-xs text-slate-500">
+            Shrinking runs locally — instant, no GPU needed, and no endpoint
+            required.
+          </p>
+        )}
       </div>
 
-      {/* Face restore */}
-      <label className="flex cursor-pointer items-start gap-3">
+      {/* Face restore — model-side only, so irrelevant when shrinking. */}
+      <label
+        className={cx(
+          'flex items-start gap-3',
+          local ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        )}
+      >
         <input
           type="checkbox"
-          checked={options.faceRestore}
-          disabled={processing}
+          checked={options.faceRestore && !local}
+          disabled={processing || local}
           onChange={(e) => onChange({ ...options, faceRestore: e.target.checked })}
           className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-900"
         />
@@ -73,13 +113,15 @@ export default function Controls({
             Face restoration
           </span>
           <span className="mt-0.5 block text-xs text-slate-500">
-            GFPGAN enhancement for portraits and human faces.
+            {local
+              ? 'Not used when shrinking — no model pass runs.'
+              : 'GFPGAN enhancement for portraits and human faces.'}
           </span>
         </span>
       </label>
 
-      {/* Tiling (advanced) */}
-      <details className="group">
+      {/* Tiling (advanced) — GPU pass only; hidden for local resizes. */}
+      <details className={cx('group', local && 'hidden')}>
         <summary className="cursor-pointer list-none text-xs font-medium text-slate-400 hover:text-slate-300">
           <span className="inline-flex items-center gap-1.5">
             <Sparkles size={13} /> Advanced tiling
@@ -129,7 +171,8 @@ export default function Controls({
           ) : (
             <>
               <Wand2 size={16} />
-              Upscale {pendingCount > 0 ? `${pendingCount} image${pendingCount > 1 ? 's' : ''}` : 'all'}
+              {local ? 'Resize' : 'Upscale'}{' '}
+              {pendingCount > 0 ? `${pendingCount} image${pendingCount > 1 ? 's' : ''}` : 'all'}
             </>
           )}
         </button>

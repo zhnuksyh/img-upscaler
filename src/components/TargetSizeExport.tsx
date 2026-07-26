@@ -6,6 +6,8 @@ import {
   compressToTargetSize,
   type CompressFormat,
 } from '../services/compressService';
+import { fitToTargetSize } from '../services/resizeService';
+import { scaleTag } from '../services/zipService';
 import type { UpscaleJob } from '../types';
 import { formatBytes } from '../utils';
 
@@ -41,6 +43,10 @@ export default function TargetSizeExport({ job }: TargetSizeExportProps) {
     (Number(amount) || 0) * (unit === 'MiB' ? 1024 * 1024 : 1024),
   );
 
+  // Above the current result size, the byte budget has to buy pixels rather
+  // than quality — a different search, surfaced with different copy.
+  const growing = targetBytes > (job.resultBlob?.size ?? 0);
+
   const baseName = (() => {
     const dot = job.file.name.lastIndexOf('.');
     return dot > 0 ? job.file.name.slice(0, dot) : job.file.name;
@@ -53,10 +59,17 @@ export default function TargetSizeExport({ job }: TargetSizeExportProps) {
     setError(null);
     setResult(null);
     try {
-      const out = await compressToTargetSize(job.resultBlob, targetBytes, format);
+      // Two different problems share this one control. Under the current size,
+      // hold dimensions and drop encoder quality (compressToTargetSize). Over
+      // it, quality can't add bytes meaningfully — so keep quality high and
+      // search dimensions instead, spending the budget on pixels.
+      const out =
+        targetBytes < job.resultBlob.size
+          ? await compressToTargetSize(job.resultBlob, targetBytes, format)
+          : await fitToTargetSize(job.resultBlob, targetBytes, format);
       setResult({ blob: out.blob, width: out.width, height: out.height });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Compression failed.');
+      setError(err instanceof Error ? err.message : 'Resizing failed.');
     } finally {
       setBusy(false);
     }
@@ -64,14 +77,14 @@ export default function TargetSizeExport({ job }: TargetSizeExportProps) {
 
   const download = () => {
     if (!result) return;
-    saveAs(result.blob, `${baseName}_${job.options.scale}x_target.${ext}`);
+    saveAs(result.blob, `${baseName}_${scaleTag(job.options.scale)}_target.${ext}`);
   };
 
   return (
     <div className="card mt-2 px-3 py-3">
       <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-300">
         <Minimize2 size={13} className="text-slate-400" />
-        Compress to target size
+        Export at a target size
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -125,9 +138,16 @@ export default function TargetSizeExport({ job }: TargetSizeExportProps) {
           className="btn-secondary text-xs"
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : null}
-          {busy ? 'Compressing…' : 'Compress'}
+          {busy ? 'Working…' : growing ? 'Fit to size' : 'Compress'}
         </button>
       </div>
+
+      {growing && (
+        <p className="mt-2 text-xs text-slate-500">
+          Target is above the current {formatBytes(job.resultBlob?.size ?? 0)} —
+          keeps quality high and picks the largest size that fits the budget.
+        </p>
+      )}
 
       {error && <p className="mt-2 text-xs text-rose-400">{error}</p>}
 
@@ -141,7 +161,9 @@ export default function TargetSizeExport({ job }: TargetSizeExportProps) {
             {result.blob.size <= targetBytes ? (
               <span className="text-emerald-400"> · within target</span>
             ) : (
-              <span className="text-amber-400"> · smallest possible</span>
+              <span className="text-amber-400">
+                {growing ? ' · closest achievable' : ' · smallest possible'}
+              </span>
             )}
           </span>
           <button type="button" onClick={download} className="btn-primary text-xs">

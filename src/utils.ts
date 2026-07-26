@@ -23,6 +23,14 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
 }
 
+/**
+ * Label a resize factor for display: "4×" when enlarging, "50%" when shrinking
+ * (a "0.5×" badge reads as a typo).
+ */
+export function formatScale(scale: number): string {
+  return scale < 1 ? `${+(scale * 100).toFixed(0)}%` : `${scale}×`;
+}
+
 /** Read an image file's natural dimensions from an object URL. */
 export function readImageSize(
   url: string,

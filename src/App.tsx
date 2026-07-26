@@ -13,15 +13,17 @@ import TargetSizeExport from './components/TargetSizeExport';
 import { resetClient, upscaleImage, UpscaleError } from './services/upscalerApi';
 import { downloadBatchZip, downloadJob } from './services/zipService';
 import { isEndpointConfigured, loadConfig, saveConfig } from './services/config';
+import { resizeByFactor } from './services/resizeService';
 
 import {
   DEFAULT_OPTIONS,
+  isDownscale,
   type EndpointConfig,
   type GalleryItem,
   type UpscaleJob,
   type UpscaleOptions,
 } from './types';
-import { formatBytes, readImageSize, uid } from './utils';
+import { formatBytes, formatScale, readImageSize, uid } from './utils';
 
 export default function App() {
   const [config, setConfig] = useState<EndpointConfig>(() => loadConfig());
@@ -138,8 +140,9 @@ export default function App() {
 
   const processAll = useCallback(async () => {
     if (processing) return;
-    // Nudge the user to configure a backend before their first upscale.
-    if (!isEndpointConfigured(config)) {
+    // Nudge the user to configure a backend before their first upscale. Pure
+    // downscales run entirely in the browser, so they need no endpoint at all.
+    if (!isDownscale(optionsRef.current.scale) && !isEndpointConfigured(config)) {
       setSettingsOpen(true);
       return;
     }
@@ -169,9 +172,17 @@ export default function App() {
       });
 
       try {
-        const blob = await upscaleImage(job.file, jobOptions, config, (text) =>
-          patchJob(id, { message: text, progress: 40 }),
-        );
+        // Downscales are pure resampling — no model can add detail that isn't
+        // there, so keep them local: instant, and no GPU credits spent.
+        const blob = isDownscale(jobOptions.scale)
+          ? await (async () => {
+              patchJob(id, { message: 'Resizing locally…', progress: 40 });
+              const out = await resizeByFactor(job.file, jobOptions.scale);
+              return out.blob;
+            })()
+          : await upscaleImage(job.file, jobOptions, config, (text) =>
+              patchJob(id, { message: text, progress: 40 }),
+            );
 
         if (cancelRef.current) {
           patchJob(id, { status: 'cancelled', message: 'Cancelled' });
@@ -294,6 +305,9 @@ export default function App() {
                 <CompareSlider
                   beforeUrl={selectedJob.originalUrl}
                   afterUrl={selectedJob.resultUrl}
+                  afterLabel={
+                    isDownscale(selectedJob.options.scale) ? 'Resized' : 'Upscaled'
+                  }
                 />
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                   <div className="card px-3 py-2">
@@ -310,7 +324,7 @@ export default function App() {
                   </div>
                   <div className="card px-3 py-2">
                     <p className="text-brand-400/80">
-                      After · {selectedJob.options.scale}×
+                      After · {formatScale(selectedJob.options.scale)}
                     </p>
                     <p className="mt-0.5 font-medium text-slate-200">
                       {selectedJob.resultWidth && selectedJob.resultHeight

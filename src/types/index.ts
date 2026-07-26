@@ -1,5 +1,16 @@
-/** Supported enlargement factors. 8x is achieved via a multi-pass 4x -> 2x pipeline. */
-export type ScaleFactor = 2 | 4 | 8;
+/**
+ * Supported resize factors. The backend runs a single 4x Real-ESRGAN pass and
+ * resamples to the requested factor, so 2x/4x/8x all come from that one model.
+ *
+ * Factors below 1 are downscales: pure resampling with no new detail to infer,
+ * so those never touch the GPU and are done in the browser instead.
+ */
+export type ScaleFactor = 0.25 | 0.5 | 0.75 | 2 | 4 | 8;
+
+/** Whether a factor needs remote inference or is a local-only resample. */
+export function isDownscale(scale: ScaleFactor): boolean {
+  return scale < 1;
+}
 
 /** Lifecycle of a single image in the batch queue. */
 export type JobStatus = 'queued' | 'processing' | 'done' | 'error' | 'cancelled';

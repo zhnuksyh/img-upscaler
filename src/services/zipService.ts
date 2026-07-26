@@ -2,6 +2,14 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import type { UpscaleJob } from '../types';
 
+/**
+ * Filename-safe tag for a resize factor: "4x" enlarging, "50pct" shrinking.
+ * Avoids "0.5x", whose dot muddles the extension.
+ */
+export function scaleTag(scale: number): string {
+  return scale < 1 ? `${+(scale * 100).toFixed(0)}pct` : `${scale}x`;
+}
+
 /** Derive an output filename like "photo_4x.png" from a source file name. */
 export function upscaledFileName(
   originalName: string,
@@ -11,7 +19,7 @@ export function upscaledFileName(
   const dot = originalName.lastIndexOf('.');
   const base = dot > 0 ? originalName.slice(0, dot) : originalName;
   const ext = extForBlob(blob);
-  return `${base}_${scale}x.${ext}`;
+  return `${base}_${scaleTag(scale)}.${ext}`;
 }
 
 function extForBlob(blob?: Blob): string {
