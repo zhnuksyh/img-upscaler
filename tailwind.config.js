@@ -4,11 +4,28 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      fontFamily: {
+        // Poppins throughout; self-hosted via @fontsource (see main.tsx).
+        sans: [
+          'Poppins',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica',
+          'Arial',
+          'sans-serif',
+        ],
+      },
       colors: {
+        // Accent ramp (Tailwind "violet"). Keep these in sync with the
+        // theme-color / icon purple in index.html + public/icon-*.svg.
         brand: {
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed',
         },
       },
       keyframes: {
