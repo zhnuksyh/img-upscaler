@@ -273,6 +273,8 @@ export interface PingResult {
   message: string;
   /** Round-trip milliseconds, when the call succeeded. */
   ms?: number;
+  /** Abandoned by the caller — carries no verdict on the endpoint. */
+  cancelled?: boolean;
 }
 
 /** A 1x1 white PNG — the smallest valid input we can ask the backend to upscale. */
@@ -292,15 +294,25 @@ const PIXEL_PNG =
 export async function pingModal(
   url: string,
   timeoutMs = 90_000,
+  /** Lets the caller abandon a slow test (e.g. the user closes Settings). */
+  externalSignal?: AbortSignal,
 ): Promise<PingResult> {
   const target = url.trim();
   if (!/^https?:\/\//i.test(target)) {
     return { ok: false, message: 'Enter a full https:// endpoint URL first.' };
   }
 
+  if (externalSignal?.aborted) {
+    return { ok: false, message: 'Connection test cancelled.', cancelled: true };
+  }
+
   const started = Date.now();
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
+  // Mirror caller-side cancellation onto our controller, which also owns the
+  // timeout. Tracked separately so we can tell "cancelled" from "timed out".
+  const onExternalAbort = () => abort.abort();
+  externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
 
   try {
     const res = await fetch(target, {
@@ -359,6 +371,11 @@ export async function pingModal(
       ms: Date.now() - started,
     };
   } catch (err) {
+    // The caller walked away — not a verdict on the endpoint, so say so
+    // rather than reporting a timeout the user never waited for.
+    if (externalSignal?.aborted) {
+      return { ok: false, message: 'Connection test cancelled.', cancelled: true };
+    }
     if (abort.signal.aborted) {
       return {
         ok: false,
@@ -372,6 +389,7 @@ export async function pingModal(
     };
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -59,23 +59,57 @@ export default function SettingsModal({
     setPing(null);
   }, [spaceId, api]);
 
+  // Held in a ref so every exit path can abort an in-flight test without
+  // re-rendering or re-creating the handlers below.
+  const testAbort = useRef<AbortController | null>(null);
+
+  // Don't leave a request in flight if the modal unmounts mid-test.
+  useEffect(() => () => testAbort.current?.abort(), []);
+
+  /** Abandon a running connection test, if any. */
+  const cancelTest = useCallback(() => {
+    testAbort.current?.abort();
+    testAbort.current = null;
+    setTesting(false);
+  }, []);
+
   const runTest = async () => {
+    cancelTest();
+    const controller = new AbortController();
+    testAbort.current = controller;
     setTesting(true);
     setPing(null);
     try {
-      setPing(await pingModal(spaceId));
+      const result = await pingModal(spaceId, undefined, controller.signal);
+      // A superseded/cancelled run must not overwrite the current state.
+      if (controller.signal.aborted) return;
+      setPing(result);
     } finally {
-      setTesting(false);
+      if (testAbort.current === controller) {
+        testAbort.current = null;
+        setTesting(false);
+      }
     }
+  };
+
+  // Leaving the modal — by any route — ends the test with it.
+  const handleClose = useCallback(() => {
+    cancelTest();
+    onClose();
+  }, [cancelTest, onClose]);
+
+  const handleSave = () => {
+    cancelTest();
+    onSave({ spaceId, hfToken, api });
   };
 
   // Close on Escape.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && handleClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, handleClose]);
 
   if (!open) return null;
 
@@ -94,7 +128,7 @@ export default function SettingsModal({
     >
       <div
         className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
       />
       <div className="relative z-10 w-full max-w-lg animate-fade-in rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
@@ -103,7 +137,7 @@ export default function SettingsModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="btn-ghost -mr-2"
             aria-label="Close settings"
           >
@@ -328,14 +362,10 @@ export default function SettingsModal({
             Reset
           </button>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="btn-secondary">
+            <button type="button" onClick={handleClose} className="btn-secondary">
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={() => onSave({ spaceId, hfToken, api })}
-              className="btn-primary"
-            >
+            <button type="button" onClick={handleSave} className="btn-primary">
               Save
             </button>
           </div>
