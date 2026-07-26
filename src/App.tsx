@@ -39,6 +39,11 @@ export default function App() {
   useEffect(() => {
     jobsRef.current = jobs;
   }, [jobs]);
+  // Live ref of the controls so the async batch loop sends current settings.
+  const optionsRef = useRef<UpscaleOptions>(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
   // Track object URLs for cleanup on unmount.
   const urlsRef = useRef<Set<string>>(new Set());
 
@@ -70,6 +75,36 @@ export default function App() {
 
   const patchJob = useCallback((id: string, patch: Partial<UpscaleJob>) => {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+  }, []);
+
+  /**
+   * The controls are the single source of truth for scale/face/tile settings:
+   * changing them re-arms every job so the next run uses what the UI shows,
+   * rather than the values that happened to be set at upload time. A job that
+   * already finished under different settings goes back to `queued` so the new
+   * choice actually takes effect.
+   */
+  const changeOptions = useCallback((next: UpscaleOptions) => {
+    setOptions(next);
+    setJobs((prev) =>
+      prev.map((j) => {
+        if (j.status === 'processing') return j;
+        const differs =
+          j.options.scale !== next.scale ||
+          j.options.faceRestore !== next.faceRestore ||
+          j.options.tileSize !== next.tileSize ||
+          j.options.tilePad !== next.tilePad;
+        if (!differs) return j;
+        return {
+          ...j,
+          options: next,
+          // Re-queue finished/cancelled work so the new settings are applied.
+          status: 'queued',
+          progress: 0,
+          message: undefined,
+        };
+      }),
+    );
   }, []);
 
   // --- File intake -------------------------------------------------------
@@ -124,6 +159,8 @@ export default function App() {
 
       const job = jobsRef.current.find((j) => j.id === id);
       if (!job) continue;
+      // Always send what the controls currently show, not a stale snapshot.
+      const jobOptions = optionsRef.current;
 
       patchJob(id, {
         status: 'processing',
@@ -132,7 +169,7 @@ export default function App() {
       });
 
       try {
-        const blob = await upscaleImage(job.file, job.options, config, (text) =>
+        const blob = await upscaleImage(job.file, jobOptions, config, (text) =>
           patchJob(id, { message: text, progress: 40 }),
         );
 
@@ -147,6 +184,9 @@ export default function App() {
         patchJob(id, {
           status: 'done',
           progress: 100,
+          // Pin the settings this result was produced with, so the labels and
+          // download filename describe the image the user is actually looking at.
+          options: jobOptions,
           resultBlob: blob,
           resultUrl,
           resultWidth: resultSize?.width,
@@ -163,7 +203,7 @@ export default function App() {
             originalUrl: job.originalUrl,
             resultUrl,
             resultBlob: blob,
-            scale: job.options.scale,
+            scale: jobOptions.scale,
             createdAt: Date.now(),
           },
           ...prev,
@@ -345,7 +385,7 @@ export default function App() {
           <aside className="lg:sticky lg:top-20 lg:h-fit">
             <Controls
               options={options}
-              onChange={setOptions}
+              onChange={changeOptions}
               onUpscaleAll={processAll}
               onCancel={cancel}
               onClear={clearAll}

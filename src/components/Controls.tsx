@@ -52,7 +52,8 @@ export default function Controls({
         </div>
         {options.scale === 8 && (
           <p className="mt-2 text-xs text-slate-500">
-            8× runs a multi-pass 4× → 2× pipeline for stability.
+            8× enlarges the 4× model output, so it adds size rather than extra
+            detail.
           </p>
         )}
       </div>
