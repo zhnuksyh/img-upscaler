@@ -230,8 +230,11 @@ async function upscaleViaModal(
       }),
     });
   } catch (err) {
+    // A rejected fetch means no HTTP response arrived at all, so this is a URL
+    // or deployment problem. A real usage-limit stop returns a status code and
+    // is handled below — mentioning quota here just sends people to billing.
     throw new UpscaleError(
-      'Could not reach the Modal endpoint. Check the URL, that it is deployed, and that the backend has not hit its monthly usage limit.',
+      'Could not reach the Modal endpoint. Check the URL is correct (it ends in .modal.run) and that the app is deployed — you can verify it in Settings.',
       { cause: err },
     );
   }
@@ -263,6 +266,113 @@ async function upscaleViaModal(
   if (!json.image) throw new UpscaleError('The Modal endpoint returned no image.');
 
   return base64ToBlob(json.image, 'image/png');
+}
+
+export interface PingResult {
+  ok: boolean;
+  message: string;
+  /** Round-trip milliseconds, when the call succeeded. */
+  ms?: number;
+}
+
+/** A 1x1 white PNG — the smallest valid input we can ask the backend to upscale. */
+const PIXEL_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+/**
+ * Verify a Modal endpoint by actually running the smallest possible upscale.
+ *
+ * Deliberately a real inference call rather than a HEAD/OPTIONS probe: a
+ * reachable host proves nothing useful, since the usual misconfiguration (the
+ * Modal dashboard URL) is a live page that answers requests happily but never
+ * returns an image. Sending a 1x1 PNG exercises CORS, routing, JSON contract
+ * and the model path for a fraction of a cent — and may cold-start the
+ * container, which is why the timeout is generous.
+ */
+export async function pingModal(
+  url: string,
+  timeoutMs = 90_000,
+): Promise<PingResult> {
+  const target = url.trim();
+  if (!/^https?:\/\//i.test(target)) {
+    return { ok: false, message: 'Enter a full https:// endpoint URL first.' };
+  }
+
+  const started = Date.now();
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(target, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: PIXEL_PNG,
+        scale: 2,
+        faceRestore: false,
+        tileSize: 0,
+        tilePad: 0,
+      }),
+      signal: abort.signal,
+    });
+
+    if (!res.ok) {
+      let detail = `Endpoint returned HTTP ${res.status}.`;
+      try {
+        const body = (await res.json()) as { error?: string };
+        if (body.error) detail = body.error;
+      } catch {
+        /* non-JSON body */
+      }
+      if (
+        res.status === 429 ||
+        res.status === 402 ||
+        res.status === 403 ||
+        isModalLimitSignal(detail)
+      ) {
+        return { ok: false, message: MODAL_QUOTA_MESSAGE };
+      }
+      return { ok: false, message: detail };
+    }
+
+    // A dashboard page or wrong route can return 200 with HTML, so require the
+    // actual JSON contract before calling this a working endpoint.
+    const text = await res.text();
+    let json: { image?: string; error?: string };
+    try {
+      json = JSON.parse(text) as { image?: string; error?: string };
+    } catch {
+      return {
+        ok: false,
+        message:
+          'Responded, but not with JSON — this looks like a web page, not the endpoint.',
+      };
+    }
+    if (json.error) return { ok: false, message: json.error };
+    if (!json.image) {
+      return { ok: false, message: 'Responded without an image — wrong endpoint?' };
+    }
+
+    return {
+      ok: true,
+      message: 'Endpoint verified — a test upscale completed.',
+      ms: Date.now() - started,
+    };
+  } catch (err) {
+    if (abort.signal.aborted) {
+      return {
+        ok: false,
+        message: `No response within ${Math.round(timeoutMs / 1000)}s. A cold start can be slow — try again.`,
+      };
+    }
+    return {
+      ok: false,
+      message:
+        'Could not reach it at all. Check the URL is right and the app is deployed.',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Read a File as a base64 data URL. */

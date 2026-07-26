@@ -1,14 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
+  CheckCircle2,
   ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
+  Loader2,
+  PlugZap,
   RotateCcw,
   Server,
   X,
+  XCircle,
 } from 'lucide-react';
 import { DEFAULT_ENDPOINT, type EndpointApi, type EndpointConfig } from '../types';
+import { checkModalUrl } from '../services/config';
+import { pingModal, type PingResult } from '../services/upscalerApi';
 
 interface SettingsModalProps {
   open: boolean;
@@ -27,6 +34,14 @@ export default function SettingsModal({
   const [hfToken, setHfToken] = useState(config.hfToken);
   const [api, setApi] = useState<EndpointApi>(config.api);
   const [showSpaceId, setShowSpaceId] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [ping, setPing] = useState<PingResult | null>(null);
+
+  // Instant, offline verdict on the URL's shape (catches the dashboard-URL slip).
+  const shape = useMemo(
+    () => (api === 'modal' ? checkModalUrl(spaceId) : null),
+    [api, spaceId],
+  );
 
   // Re-sync local form state whenever the modal is (re)opened.
   useEffect(() => {
@@ -35,8 +50,24 @@ export default function SettingsModal({
       setHfToken(config.hfToken);
       setApi(config.api);
       setShowSpaceId(false);
+      setPing(null);
     }
   }, [open, config]);
+
+  // A previous pass/fail says nothing about a URL that has since been edited.
+  useEffect(() => {
+    setPing(null);
+  }, [spaceId, api]);
+
+  const runTest = async () => {
+    setTesting(true);
+    setPing(null);
+    try {
+      setPing(await pingModal(spaceId));
+    } finally {
+      setTesting(false);
+    }
+  };
 
   // Close on Escape.
   useEffect(() => {
@@ -156,6 +187,93 @@ export default function SettingsModal({
                 ? 'The URL printed by `modal deploy` (ends in .modal.run).'
                 : 'e.g. owner/img-upscaler or a full *.hf.space URL.'}
             </span>
+
+            {api === 'modal' && (
+              <div className="mt-2 space-y-2">
+                {/* Shape check: instant, no network. Hidden once a live test has
+                    run, since that result is strictly more authoritative. */}
+                {shape && !ping && !testing && (
+                  <div
+                    className={
+                      'flex items-start gap-1.5 text-xs ' +
+                      (shape.level === 'error'
+                        ? 'text-rose-400'
+                        : shape.level === 'warn'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400')
+                    }
+                  >
+                    {shape.level === 'ok' ? (
+                      <CheckCircle2 size={13} className="mt-0.5 shrink-0" />
+                    ) : (
+                      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                    )}
+                    <span>
+                      {shape.message}
+                      {shape.suggestion && (
+                        <>
+                          {' '}
+                          <button
+                            type="button"
+                            onClick={() => setSpaceId(shape.suggestion!)}
+                            className="font-medium text-brand-400 underline decoration-dotted hover:text-brand-300"
+                          >
+                            Use {shape.suggestion}
+                          </button>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={runTest}
+                    disabled={testing || !spaceId.trim()}
+                    className="btn-secondary text-xs"
+                  >
+                    {testing ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <PlugZap size={13} />
+                    )}
+                    {testing ? 'Testing…' : 'Test connection'}
+                  </button>
+                  {testing && (
+                    <span className="text-xs text-slate-500">
+                      Running a 1×1 test upscale — a cold start can take ~30s.
+                    </span>
+                  )}
+                </div>
+
+                {ping && (
+                  <div
+                    className={
+                      'flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-xs ' +
+                      (ping.ok
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                        : 'border-rose-500/30 bg-rose-500/10 text-rose-300')
+                    }
+                  >
+                    {ping.ok ? (
+                      <CheckCircle2 size={13} className="mt-0.5 shrink-0" />
+                    ) : (
+                      <XCircle size={13} className="mt-0.5 shrink-0" />
+                    )}
+                    <span>
+                      {ping.message}
+                      {ping.ms !== undefined && (
+                        <span className="text-emerald-400/70">
+                          {' '}
+                          ({(ping.ms / 1000).toFixed(1)}s)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </label>
 
           {api === 'modal' && (
