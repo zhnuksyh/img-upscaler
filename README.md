@@ -5,12 +5,17 @@ super-resolution (2× / 4× / 8×) with optional GFPGAN face restoration, runnin
 on a **serverless cloud GPU** (Modal). The web app is a static site you host on
 **GitHub Pages** — no server to run, no image storage, no bills.
 
-- 🚀 **100% cloud GPU** — all inference runs remotely; your device only handles
-  UI, encoding, and rendering. Works for photos, illustrations, anime, and art.
+- 🚀 **Cloud GPU for upscaling** — every AI inference pass runs remotely; your
+  device only handles UI, encoding, and rendering. Works for photos,
+  illustrations, anime, and art. (Shrinking needs no model, so it stays local —
+  see below.)
 - 🎛️ **High-quality output** — Real-ESRGAN x4plus with smart tiling + overlap
   padding to kill seams and avoid VRAM crashes.
 - 👤 **Face restoration** — optional GFPGAN pass for crisp, natural portraits.
   (Leave it off for anime/cartoons — it's tuned for realistic human faces.)
+- 📉 **Make smaller — instant, no GPU** — shrink to 25/50/75%, or to a file-size
+  budget ("under 250 KB"). Runs entirely in your browser, so it needs no
+  endpoint configured and costs nothing.
 - 📦 **Batch mode** — drop many images, watch per-file progress, download each
   or grab everything as a `.zip`.
 - 🔀 **Before/after slider** — drag to inspect original vs. upscaled detail,
@@ -125,6 +130,15 @@ Open the printed localhost URL, click **Settings**, choose Backend type
 the URL is stored only in your browser's `localStorage` and is remembered on
 every future visit from that browser.
 
+> **Paste the deployed endpoint, not the dashboard page.** A common mistake is
+> copying `modal.com/apps/<user>/main/deployed/<app>` from the browser address
+> bar; the endpoint you want is the `https://<user>--<app>-upscale.modal.run`
+> URL that `modal deploy` prints. Settings flags that mistake as you type and
+> offers the correct URL as a one-click fix. **Test connection** then runs a
+> real 1×1 upscale against the endpoint and checks the JSON response contract,
+> so a green result means the backend actually works — not just that something
+> answered.
+
 > **Keep your endpoint URL private.** The Modal endpoint has no password —
 > anyone who has the URL can send requests and spend *your* free credits. Don't
 > commit it, screenshot it, or bake it into a public build. Because it lives
@@ -151,17 +165,35 @@ Your site: `https://<you>.github.io/<repo>/`.
 
 ---
 
-## Scale factors & tiling
+## Resize factors & tiling
 
-| Scale | Pipeline                                    |
-| ----- | ------------------------------------------- |
-| 2×    | Real-ESRGAN 4× → Lanczos downscale to 2×    |
-| 4×    | Real-ESRGAN x4plus (native)                 |
-| 8×    | Real-ESRGAN 4× → high-quality 2× resample   |
+| Factor        | Pipeline                                       | Runs on |
+| ------------- | ---------------------------------------------- | ------- |
+| 25 / 50 / 75% | Canvas resample in halving steps               | Browser |
+| 2×            | Real-ESRGAN 4× → Lanczos downscale to 2×       | GPU     |
+| 4×            | Real-ESRGAN x4plus (native)                    | GPU     |
+| 8×            | Real-ESRGAN 4× → high-quality 2× resample      | GPU     |
+
+Shrinking invents no new detail, so the sub-1× factors never touch the GPU —
+they work with **no endpoint configured at all** and cost no credits. Face
+restoration and tiling are hidden for those, since no model pass runs.
 
 **Tiling** splits large images into overlapping tiles (default 512 px, 16 px
 padding) so the GPU never runs out of memory and no seams appear at tile edges.
 Tune both under **Advanced tiling** in the controls.
+
+### Hitting a file-size budget
+
+Instead of a percentage you can name a target size (e.g. `250 KB`, `2 MB`) and
+the app compresses until the file fits. It works in both directions:
+
+- **Below** the current size → dimensions are held and encoder quality is
+  binary-searched down until the file fits the budget.
+- **Above** it → quality is held high and *dimensions* are searched instead, so
+  the extra bytes buy pixels rather than artifacts.
+
+Either way the work happens in-browser on a result you already have; growing
+past the source resolution costs a single GPU pass, not one per candidate size.
 
 ---
 
@@ -237,8 +269,15 @@ dimensions; the app maps usage-limit errors to a clear "not billed" message.
 modal_app/modal_app.py         Modal serverless-GPU backend (recommended)
 hf_space/                      HF Gradio Space backend (needs PRO)
 src/
-  components/                  UI (DropZone, BatchQueue, CompareSlider, …)
-  services/                    upscalerApi, zipService, config
+  components/                  UI (DropZone, BatchQueue, CompareSlider,
+                               Controls, TargetSizeExport, HistoryGallery,
+                               SettingsModal, Header)
+  services/
+    upscalerApi.ts             remote GPU calls + endpoint ping
+    resizeService.ts           in-browser downscale / fit-to-target-size
+    compressService.ts         quality binary search to a byte budget
+    config.ts                  localStorage config + Modal URL validation
+    zipService.ts              batch .zip export
   types/                       shared TypeScript interfaces
   App.tsx                      layout + batch state management
 ```
