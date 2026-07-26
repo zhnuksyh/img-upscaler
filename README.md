@@ -13,15 +13,18 @@ on a **serverless cloud GPU** (Modal). The web app is a static site you host on
   padding to kill seams and avoid VRAM crashes.
 - 👤 **Face restoration** — optional GFPGAN pass for crisp, natural portraits.
   (Leave it off for anime/cartoons — it's tuned for realistic human faces.)
-- 📉 **Make smaller — instant, no GPU** — shrink to 25/50/75%, or to a file-size
-  budget ("under 250 KB"). Runs entirely in your browser, so it needs no
-  endpoint configured and costs nothing.
+- 📉 **Make smaller — instant, no GPU** — shrink to a file-size budget
+  ("under 250 KB"). Runs entirely in your browser, so it needs no endpoint
+  configured and costs nothing.
 - 📦 **Batch mode** — drop many images, watch per-file progress, download each
   or grab everything as a `.zip`.
 - 🔀 **Before/after slider** — drag to inspect original vs. upscaled detail,
   with before/after dimensions and file sizes.
 - 🔒 **Deploy-your-own** — no shared backend; each user points the app at their
   own Modal endpoint, so nobody spends anyone else's credits.
+- 📲 **Installable PWA** — install it from your browser and launch it like a
+  native app. The interface is cached, so it opens offline; shrinking to a file
+  size keeps working with no connection at all (upscaling still needs the GPU).
 - 🌑 **Sleek dark UI** — built with Vite + React + TypeScript + Tailwind.
 
 ---
@@ -184,8 +187,8 @@ Tune both under **Advanced tiling** in the controls.
 
 ### Hitting a file-size budget
 
-Instead of a percentage you can name a target size (e.g. `250 KB`, `2 MB`) and
-the app compresses until the file fits. It works in both directions:
+Name a target size (e.g. `250 KB`, `2 MB`) and the app compresses until the
+file fits. It works in both directions:
 
 - **Below** the current size → dimensions are held and encoder quality is
   binary-searched down until the file fits the budget.
