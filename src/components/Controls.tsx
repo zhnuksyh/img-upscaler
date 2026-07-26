@@ -15,8 +15,6 @@ interface ControlsProps {
 }
 
 const UPSCALES: ScaleFactor[] = [2, 4, 8];
-/** Sub-1x factors, resampled in the browser with no GPU call. */
-const DOWNSCALES: ScaleFactor[] = [0.25, 0.5, 0.75];
 
 export default function Controls({
   options,
@@ -62,72 +60,23 @@ export default function Controls({
           Make smaller · instant, no GPU
         </label>
 
-        {/* Two ways to shrink: by percentage, or to a file-size budget. */}
-        <div className="mb-2 flex overflow-hidden rounded-lg border border-slate-700 text-xs">
-          {(
-            [
-              ['factor', 'By percent'],
-              ['filesize', 'To file size'],
-            ] as const
-          ).map(([mode, label]) => (
-            <button
-              key={mode}
-              type="button"
-              disabled={processing}
-              onClick={() =>
-                onChange({
-                  ...options,
-                  shrinkMode: mode,
-                  // Entering either shrink mode implies a downscale; default to
-                  // 50% so the choice takes effect without a second click.
-                  scale: local ? options.scale : 0.5,
-                })
-              }
-              className={cx(
-                'flex-1 px-2.5 py-1.5 transition-colors disabled:opacity-50',
-                local && options.shrinkMode === mode
-                  ? 'bg-brand-500/15 text-brand-300'
-                  : 'bg-slate-950 text-slate-400 hover:text-slate-200',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {options.shrinkMode === 'filesize' ? (
-          <SizeBudget
-            bytes={options.targetBytes}
-            disabled={processing}
-            onChange={(targetBytes) =>
-              onChange({
-                ...options,
-                targetBytes,
-                shrinkMode: 'filesize',
-                scale: local ? options.scale : 0.5,
-              })
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {DOWNSCALES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={processing}
-                onClick={() => onChange({ ...options, scale: s, shrinkMode: 'factor' })}
-                className={cx(
-                  'rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50',
-                  local && options.scale === s
-                    ? 'border-brand-500 bg-brand-500/15 text-brand-300'
-                    : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600',
-                )}
-              >
-                {formatScale(s)}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Shrinking is file-size budgeted only: picking a byte target is the
+            outcome people actually want, and the dimension search reaches it
+            more precisely than a fixed percentage would. */}
+        <SizeBudget
+          bytes={options.targetBytes}
+          disabled={processing}
+          onChange={(targetBytes) =>
+            onChange({
+              ...options,
+              targetBytes,
+              shrinkMode: 'filesize',
+              // Any sub-1x value marks this as a local job; the budget search
+              // determines the real dimensions, so the factor is just a flag.
+              scale: local ? options.scale : 0.5,
+            })
+          }
+        />
 
         {options.scale === 8 && (
           <p className="mt-2 text-xs text-slate-500">
@@ -137,9 +86,8 @@ export default function Controls({
         )}
         {local && (
           <p className="mt-2 text-xs text-slate-500">
-            {options.shrinkMode === 'filesize'
-              ? 'Shrinks dimensions until the file fits your budget. Saved as JPEG.'
-              : 'Runs in your browser — no endpoint needed and no GPU credits used.'}
+            Shrinks dimensions until the file fits your budget. Saved as JPEG —
+            runs in your browser, no endpoint or GPU credits needed.
           </p>
         )}
       </div>
@@ -151,13 +99,6 @@ export default function Controls({
           local ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
         )}
       >
-        <input
-          type="checkbox"
-          checked={options.faceRestore && !local}
-          disabled={processing || local}
-          onChange={(e) => onChange({ ...options, faceRestore: e.target.checked })}
-          className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-900"
-        />
         <span className="flex-1">
           <span className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
             <ScanFace size={15} className="text-slate-400" />
@@ -169,6 +110,27 @@ export default function Controls({
               : 'GFPGAN enhancement for portraits and human faces.'}
           </span>
         </span>
+
+        {/* Switch: a visually-hidden checkbox keeps native semantics and
+            keyboard behaviour; the sibling span is the rendered track. */}
+        <input
+          type="checkbox"
+          role="switch"
+          checked={options.faceRestore && !local}
+          disabled={processing || local}
+          onChange={(e) => onChange({ ...options, faceRestore: e.target.checked })}
+          className="peer sr-only"
+        />
+        <span
+          aria-hidden="true"
+          className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full bg-slate-700
+            transition-colors peer-checked:bg-brand-500
+            peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500
+            peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900
+            after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4
+            after:rounded-full after:bg-white after:transition-transform
+            after:content-[''] peer-checked:after:translate-x-4"
+        />
       </label>
 
       {/* Tiling (advanced) — GPU pass only; hidden for local resizes. */}
