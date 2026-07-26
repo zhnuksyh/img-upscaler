@@ -6,7 +6,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { JobStatus, UpscaleJob } from '../types';
-import { cx, formatBytes, formatScale } from '../utils';
+import { cx, formatBytes, formatTarget } from '../utils';
 
 interface BatchQueueProps {
   jobs: UpscaleJob[];
@@ -88,7 +88,7 @@ export default function BatchQueue({
                     <>
                       <span aria-hidden>·</span>
                       <span>
-                        {job.width}×{job.height} → {formatScale(job.options.scale)}
+                        {job.width}×{job.height} → {formatTarget(job.options)}
                       </span>
                     </>
                   )}

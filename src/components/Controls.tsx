@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Loader2, ScanFace, Sparkles, Wand2, X } from 'lucide-react';
 import type { ScaleFactor, UpscaleOptions } from '../types';
 import { cx, formatScale } from '../utils';
@@ -58,26 +59,75 @@ export default function Controls({
         </div>
 
         <label className="mb-2 mt-4 block text-xs font-medium uppercase tracking-wide text-slate-400">
-          Shrink · in browser
+          Make smaller · instant, no GPU
         </label>
-        <div className="grid grid-cols-3 gap-2">
-          {DOWNSCALES.map((s) => (
+
+        {/* Two ways to shrink: by percentage, or to a file-size budget. */}
+        <div className="mb-2 flex overflow-hidden rounded-lg border border-slate-700 text-xs">
+          {(
+            [
+              ['factor', 'By percent'],
+              ['filesize', 'To file size'],
+            ] as const
+          ).map(([mode, label]) => (
             <button
-              key={s}
+              key={mode}
               type="button"
               disabled={processing}
-              onClick={() => onChange({ ...options, scale: s })}
+              onClick={() =>
+                onChange({
+                  ...options,
+                  shrinkMode: mode,
+                  // Entering either shrink mode implies a downscale; default to
+                  // 50% so the choice takes effect without a second click.
+                  scale: local ? options.scale : 0.5,
+                })
+              }
               className={cx(
-                'rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50',
-                options.scale === s
-                  ? 'border-brand-500 bg-brand-500/15 text-brand-300'
-                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600',
+                'flex-1 px-2.5 py-1.5 transition-colors disabled:opacity-50',
+                local && options.shrinkMode === mode
+                  ? 'bg-brand-500/15 text-brand-300'
+                  : 'bg-slate-950 text-slate-400 hover:text-slate-200',
               )}
             >
-              {formatScale(s)}
+              {label}
             </button>
           ))}
         </div>
+
+        {options.shrinkMode === 'filesize' ? (
+          <SizeBudget
+            bytes={options.targetBytes}
+            disabled={processing}
+            onChange={(targetBytes) =>
+              onChange({
+                ...options,
+                targetBytes,
+                shrinkMode: 'filesize',
+                scale: local ? options.scale : 0.5,
+              })
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {DOWNSCALES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                disabled={processing}
+                onClick={() => onChange({ ...options, scale: s, shrinkMode: 'factor' })}
+                className={cx(
+                  'rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50',
+                  local && options.scale === s
+                    ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                    : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600',
+                )}
+              >
+                {formatScale(s)}
+              </button>
+            ))}
+          </div>
+        )}
 
         {options.scale === 8 && (
           <p className="mt-2 text-xs text-slate-500">
@@ -85,10 +135,11 @@ export default function Controls({
             detail.
           </p>
         )}
-        {options.scale < 1 && (
+        {local && (
           <p className="mt-2 text-xs text-slate-500">
-            Shrinking runs locally — instant, no GPU needed, and no endpoint
-            required.
+            {options.shrinkMode === 'filesize'
+              ? 'Shrinks dimensions until the file fits your budget. Saved as JPEG.'
+              : 'Runs in your browser — no endpoint needed and no GPU credits used.'}
           </p>
         )}
       </div>
@@ -197,6 +248,84 @@ export default function Controls({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Free-form file-size budget: type any number, pick KB or MB.
+ *
+ * Keeps the typed text in local state rather than deriving it from `bytes`, so
+ * a half-finished entry ("1." on the way to "1.5") isn't rewritten under the
+ * cursor. Unit changes reinterpret the same number rather than converting it —
+ * switching MB to KB after typing 2 means 2 KB, which is what the visible
+ * field says.
+ */
+function SizeBudget({
+  bytes,
+  disabled,
+  onChange,
+}: {
+  bytes: number;
+  disabled?: boolean;
+  onChange: (bytes: number) => void;
+}) {
+  const initialMb = bytes >= 1024 * 1024;
+  const [unit, setUnit] = useState<'KB' | 'MB'>(initialMb ? 'MB' : 'KB');
+  const [text, setText] = useState(
+    String(+(bytes / (initialMb ? 1024 * 1024 : 1024)).toFixed(2)),
+  );
+
+  const push = (nextText: string, nextUnit: 'KB' | 'MB') => {
+    const n = Number(nextText);
+    if (Number.isFinite(n) && n > 0) {
+      onChange(Math.round(n * (nextUnit === 'MB' ? 1024 * 1024 : 1024)));
+    }
+  };
+
+  const invalid = text.trim() !== '' && !(Number(text) > 0);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          step="any"
+          value={text}
+          disabled={disabled}
+          placeholder="500"
+          onChange={(e) => {
+            setText(e.target.value);
+            push(e.target.value, unit);
+          }}
+          className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+        />
+        <div className="flex overflow-hidden rounded-lg border border-slate-700">
+          {(['KB', 'MB'] as const).map((u) => (
+            <button
+              key={u}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setUnit(u);
+                push(text, u);
+              }}
+              className={cx(
+                'px-3 py-2 text-xs transition-colors disabled:opacity-50',
+                unit === u
+                  ? 'bg-brand-500/15 text-brand-300'
+                  : 'bg-slate-950 text-slate-400 hover:text-slate-200',
+              )}
+            >
+              {u}
+            </button>
+          ))}
+        </div>
+      </div>
+      {invalid && (
+        <p className="mt-1 text-xs text-rose-400">Enter a number above 0.</p>
+      )}
     </div>
   );
 }

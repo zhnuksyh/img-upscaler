@@ -2,7 +2,7 @@ import { Clock, Download } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import type { GalleryItem } from '../types';
 import { upscaledFileName } from '../services/zipService';
-import { formatScale } from '../utils';
+import { formatTarget } from '../utils';
 
 interface HistoryGalleryProps {
   items: GalleryItem[];
@@ -33,7 +33,7 @@ export default function HistoryGallery({ items, onSelect }: HistoryGalleryProps)
               type="button"
               onClick={() => onSelect(item)}
               className="block w-full overflow-hidden rounded-lg ring-1 ring-slate-800 transition-transform hover:ring-brand-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-              title={`${item.name} · ${formatScale(item.scale)}`}
+              title={`${item.name} · ${formatTarget(item)}`}
             >
               <img
                 src={item.resultUrl}
@@ -41,7 +41,7 @@ export default function HistoryGallery({ items, onSelect }: HistoryGalleryProps)
                 className="aspect-square w-full object-cover"
               />
               <span className="absolute left-1 top-1 rounded bg-slate-950/70 px-1.5 py-0.5 text-[10px] font-semibold text-brand-300">
-                {formatScale(item.scale)}
+                {formatTarget(item)}
               </span>
             </button>
             <button

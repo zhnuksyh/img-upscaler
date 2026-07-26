@@ -22,9 +22,20 @@ export const ACCEPTED_TYPES = [
   'image/webp',
 ] as const;
 
+/**
+ * How a "shrink" job decides its output size.
+ * - `factor`: a percentage of the original dimensions.
+ * - `filesize`: hit a byte budget, letting the dimensions fall where they may.
+ */
+export type ShrinkMode = 'factor' | 'filesize';
+
 /** Options passed to the remote Real-ESRGAN inference call. */
 export interface UpscaleOptions {
   scale: ScaleFactor;
+  /** Which shrink strategy applies when `scale` is a downscale. */
+  shrinkMode: ShrinkMode;
+  /** Target output size in bytes, used when `shrinkMode` is 'filesize'. */
+  targetBytes: number;
   /** Apply GFPGAN/CodeFormer face restoration for portraits. */
   faceRestore: boolean;
   /** Tile size in px for the GPU tiling pass (0 disables tiling). */
@@ -35,6 +46,8 @@ export interface UpscaleOptions {
 
 export const DEFAULT_OPTIONS: UpscaleOptions = {
   scale: 4,
+  shrinkMode: 'factor',
+  targetBytes: 500 * 1024,
   faceRestore: false,
   tileSize: 512,
   tilePad: 16,
@@ -76,6 +89,9 @@ export interface GalleryItem {
   resultUrl: string;
   resultBlob: Blob;
   scale: ScaleFactor;
+  /** What the job targeted, so a byte-budget entry isn't badged as a factor. */
+  shrinkMode?: ShrinkMode;
+  targetBytes?: number;
   createdAt: number;
 }
 

@@ -14,6 +14,7 @@ import { resetClient, upscaleImage, UpscaleError } from './services/upscalerApi'
 import { downloadBatchZip, downloadJob } from './services/zipService';
 import { isEndpointConfigured, loadConfig, saveConfig } from './services/config';
 import { resizeByFactor } from './services/resizeService';
+import { compressToTargetSize } from './services/compressService';
 
 import {
   DEFAULT_OPTIONS,
@@ -23,7 +24,7 @@ import {
   type UpscaleJob,
   type UpscaleOptions,
 } from './types';
-import { formatBytes, formatScale, readImageSize, uid } from './utils';
+import { formatBytes, formatTarget, readImageSize, uid } from './utils';
 
 export default function App() {
   const [config, setConfig] = useState<EndpointConfig>(() => loadConfig());
@@ -93,6 +94,8 @@ export default function App() {
         if (j.status === 'processing') return j;
         const differs =
           j.options.scale !== next.scale ||
+          j.options.shrinkMode !== next.shrinkMode ||
+          j.options.targetBytes !== next.targetBytes ||
           j.options.faceRestore !== next.faceRestore ||
           j.options.tileSize !== next.tileSize ||
           j.options.tilePad !== next.tilePad;
@@ -177,6 +180,15 @@ export default function App() {
         const blob = isDownscale(jobOptions.scale)
           ? await (async () => {
               patchJob(id, { message: 'Resizing locally…', progress: 40 });
+              // A file-size budget ignores the factor entirely: compress until
+              // the bytes fit, which decides the dimensions for us.
+              if (jobOptions.shrinkMode === 'filesize') {
+                const fitted = await compressToTargetSize(
+                  job.file,
+                  jobOptions.targetBytes,
+                );
+                return fitted.blob;
+              }
               const out = await resizeByFactor(job.file, jobOptions.scale);
               return out.blob;
             })()
@@ -215,6 +227,8 @@ export default function App() {
             resultUrl,
             resultBlob: blob,
             scale: jobOptions.scale,
+            shrinkMode: jobOptions.shrinkMode,
+            targetBytes: jobOptions.targetBytes,
             createdAt: Date.now(),
           },
           ...prev,
@@ -324,7 +338,7 @@ export default function App() {
                   </div>
                   <div className="card px-3 py-2">
                     <p className="text-brand-400/80">
-                      After · {formatScale(selectedJob.options.scale)}
+                      After · {formatTarget(selectedJob.options)}
                     </p>
                     <p className="mt-0.5 font-medium text-slate-200">
                       {selectedJob.resultWidth && selectedJob.resultHeight
@@ -409,9 +423,10 @@ export default function App() {
             />
 
             <p className="mt-3 px-1 text-xs leading-relaxed text-slate-600">
-              All processing runs remotely on a cloud GPU backend. Your images
-              never touch a central server — the browser talks straight to your
-              endpoint and holds results in memory for this session only.
+              Enlarging runs on your own cloud GPU endpoint; making images
+              smaller happens right here in the browser. Either way your images
+              never touch a central server, and results are held in memory for
+              this session only.
             </p>
           </aside>
         </div>

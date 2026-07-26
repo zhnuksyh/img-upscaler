@@ -31,6 +31,21 @@ export function formatScale(scale: number): string {
   return scale < 1 ? `${+(scale * 100).toFixed(0)}%` : `${scale}×`;
 }
 
+/**
+ * Describe what a job was asked to do. A file-size budget has no meaningful
+ * factor, so name the budget instead — "≤ 500 KB" rather than "50%".
+ */
+export function formatTarget(opts: {
+  scale: number;
+  shrinkMode?: string;
+  targetBytes?: number;
+}): string {
+  if (opts.scale < 1 && opts.shrinkMode === 'filesize' && opts.targetBytes) {
+    return `≤ ${formatBytes(opts.targetBytes)}`;
+  }
+  return formatScale(opts.scale);
+}
+
 /** Read an image file's natural dimensions from an object URL. */
 export function readImageSize(
   url: string,

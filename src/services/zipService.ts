@@ -36,10 +36,22 @@ function extForBlob(blob?: Blob): string {
 /** Download a single completed job's result. */
 export function downloadJob(job: UpscaleJob): void {
   if (!job.resultBlob) return;
-  saveAs(
-    job.resultBlob,
-    upscaledFileName(job.file.name, job.options.scale, job.resultBlob),
-  );
+  saveAs(job.resultBlob, jobFileName(job));
+}
+
+/**
+ * Output name for a job. A file-size-budget job has no meaningful factor, so it
+ * is tagged with the budget it was aiming for ("photo_500kb.jpg").
+ */
+export function jobFileName(job: UpscaleJob): string {
+  if (job.options.scale < 1 && job.options.shrinkMode === 'filesize') {
+    const dot = job.file.name.lastIndexOf('.');
+    const base = dot > 0 ? job.file.name.slice(0, dot) : job.file.name;
+    const kb = Math.round(job.options.targetBytes / 1024);
+    const tag = kb >= 1024 ? `${+(kb / 1024).toFixed(1)}mb` : `${kb}kb`;
+    return `${base}_${tag}.${extForBlob(job.resultBlob)}`;
+  }
+  return upscaledFileName(job.file.name, job.options.scale, job.resultBlob);
 }
 
 /**
@@ -57,7 +69,7 @@ export async function downloadBatchZip(
   const used = new Set<string>();
 
   for (const job of completed) {
-    let name = upscaledFileName(job.file.name, job.options.scale, job.resultBlob);
+    let name = jobFileName(job);
     if (used.has(name)) {
       const dot = name.lastIndexOf('.');
       const base = name.slice(0, dot);
